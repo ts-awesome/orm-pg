@@ -1,10 +1,11 @@
-import {PoolClient} from "pg";
-import {PgExecutor} from "./executor";
-import {ISqlTransaction} from "./interfaces";
-import {injectable} from "inversify";
+import {PoolClient} from 'pg';
+import {PgExecutor} from './executor';
+import {ISqlQuery} from './interfaces';
+import {injectable} from 'inversify';
+import {ISqlTransaction} from '@viatsyshyn/ts-orm';
 
 @injectable()
-export class PgTransaction extends PgExecutor implements ISqlTransaction {
+export class PgTransaction extends PgExecutor implements ISqlTransaction<ISqlQuery> {
   private conn: PoolClient;
   private isFinished = false;
 
@@ -22,7 +23,7 @@ export class PgTransaction extends PgExecutor implements ISqlTransaction {
       throw new Error();
     }
 
-    await this.conn.query("COMMIT");
+    await this.conn.query('COMMIT');
     this.conn.release();
   }
 
@@ -31,7 +32,7 @@ export class PgTransaction extends PgExecutor implements ISqlTransaction {
       throw new Error();
     }
 
-    await this.conn.query("ROLLBACK");
+    await this.conn.query('ROLLBACK');
     this.conn.release();
   }
 }

@@ -1,10 +1,4 @@
-import {DbValueType, IQueryExecutor} from "@viatsyshyn/ts-orm";
-
-export interface ISqlTransaction extends IQueryExecutor<ISqlQuery> {
-  readonly finished: boolean;
-  commit(): Promise<void>;
-  rollback(): Promise<void>;
-}
+import {DbValueType} from '@viatsyshyn/ts-orm';
 
 export interface ISqlQuery {
   sql: string
@@ -18,9 +12,4 @@ export interface IPgErrorResult {
   error: string;
   table: string;
   constraint: string;
-}
-
-export interface ISqlDataDriver extends IQueryExecutor<ISqlQuery> {
-  begin(): Promise<ISqlTransaction>;
-  end(): Promise<void>;
 }
