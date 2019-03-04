@@ -8,8 +8,8 @@ import {
   IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
   DbValueType,
+  IExpr
 } from '@viatsyshyn/ts-orm';
-import {IExpr} from "@viatsyshyn/ts-orm/dist/src/builder";
 
 import {ISqlQuery} from './interfaces';
 import {injectable} from "inversify";
@@ -171,10 +171,35 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   };
 }
 
-function UpsertCompiler(query: IBuildableUpsertQuery): ISqlQuery {
-  return {
-    sql: ''
+function UpsertCompiler({_values, _table, _conflitcColumns}: IBuildableUpsertQuery): ISqlQuery {
+  sqlCompiler.resetParams()
+  
+  const fields = Object.keys(_values).map(field => pgBuilder.escapeColumn(field));
+  const values = Object.keys(_values).map(field => sqlCompiler.compileExp(_values[field]));
+  const updateValues = Object.keys(_values).map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
+
+  if (!_conflitcColumns || !_conflitcColumns.length) {
+    _conflitcColumns = [...fields];
   }
+
+  let sql = `
+    INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})
+    VALUES (${values.join(', ')})
+    ON CONFLICT`;
+  
+  if(!_conflitcColumns || !_conflitcColumns.length) {
+    sql += ` DO NOTHING`;
+  } else {
+    sql += `(${_conflitcColumns.map(c => pgBuilder.escapeColumn(c)).join(',')})
+    DO UPDATE SET ${updateValues.join(', ')}`;
+  }
+  sql += ` RETURNING *;`
+  
+  const params = sqlCompiler.collectParams();
+  return {
+    sql,
+    params
+  };
 }
 
 function UpdateCompiler({_values, _where, _table, _limit}: IBuildableUpdateQuery): ISqlQuery {
