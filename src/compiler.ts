@@ -161,7 +161,7 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   const fields = Object.keys(_values).map(field => pgBuilder.escapeColumn(field));
   const values = Object.keys(_values).map(field => sqlCompiler.compileExp(_values[field]));
 
-  let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')})`;
+  let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')})  RETURNING *;`;
 
   const params = sqlCompiler.collectParams();
 
@@ -221,6 +221,7 @@ function UpdateCompiler({_values, _where, _table, _limit}: IBuildableUpdateQuery
   if (_limit) {
     sql += ' LIMIT ' + sqlCompiler.compileExp(_limit)
   }
+  sql += ` RETURNING *;`;
 
   const params = sqlCompiler.collectParams();
 
@@ -245,6 +246,7 @@ function DeleteCompiler({_where, _table, _limit}: IBuildableDeleteQuery): ISqlQu
   if (_limit) {
     sql += ' LIMIT ' + sqlCompiler.compileExp(_limit)
   }
+  sql += ` RETURNING *;`;
 
   const params = sqlCompiler.collectParams();
 
