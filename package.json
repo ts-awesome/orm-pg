@@ -16,7 +16,7 @@
     "@types/pg": "^7.0.0",
     "@types/inversify": "^2.0.33",
     "typescript": "^3.3.3",
-    "@viatsyshyn/ts-orm": "~0.1.5",
+    "@viatsyshyn/ts-orm": "~0.1.6",
     "pg": "^7.0.0",
     "inversify": "^5.0.0"
   },

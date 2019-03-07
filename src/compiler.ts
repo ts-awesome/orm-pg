@@ -39,6 +39,7 @@ const sqlCompiler = {
     if (Array.isArray(expr)) {
       return `(${expr.map(item => this.compileExp(item)).join(', ')})`;
     }
+    if (expr === null) return 'NULL';
     if (expr === 'NULL') return 'NULL';
     if (expr === '*') return '*';
 
@@ -83,7 +84,7 @@ const sqlCompiler = {
 
     return columns.map(column => {
       const {_alias, _operands} = column as IExpr;
-      if (_alias) return `${this.compileExp(_operands)} AS ${_alias}`;
+      if (_alias) return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumn(_alias)}`;
       return typeof column === 'string' ? column : this.compileExp(column);
     }).join(', ')
   },
@@ -158,8 +159,9 @@ function SelectCompiler(query: IBuildableSelectQuery): ISqlQuery {
 function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   sqlCompiler.resetParams();
 
-  const fields = Object.keys(_values).map(field => pgBuilder.escapeColumn(field));
-  const values = Object.keys(_values).map(field => sqlCompiler.compileExp(_values[field]));
+  const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
+  const fields = keys.map(field => pgBuilder.escapeColumn(field));
+  const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
 
   let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')})  RETURNING *;`;
 
@@ -174,9 +176,10 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
 function UpsertCompiler({_values, _table, _conflitcColumns}: IBuildableUpsertQuery): ISqlQuery {
   sqlCompiler.resetParams()
   
-  const fields = Object.keys(_values).map(field => pgBuilder.escapeColumn(field));
-  const values = Object.keys(_values).map(field => sqlCompiler.compileExp(_values[field]));
-  const updateValues = Object.keys(_values).map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
+  const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
+  const fields = keys.map(field => pgBuilder.escapeColumn(field));
+  const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
+  const updateValues = keys.map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
   if (!_conflitcColumns || !_conflitcColumns.length) {
     _conflitcColumns = [...fields];
@@ -207,6 +210,7 @@ function UpdateCompiler({_values, _where, _table, _limit}: IBuildableUpdateQuery
 
   const values = Object
     .keys(_values)
+    .filter(field => _values[field] !== undefined)
     .map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
   let sql = `UPDATE ${pgBuilder.escapeTable(_table.tableName)} SET ${values.join(', ')}`;
