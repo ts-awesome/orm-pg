@@ -173,7 +173,7 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   };
 }
 
-function UpsertCompiler({_values, _table, _conflitcColumns}: IBuildableUpsertQuery): ISqlQuery {
+function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery): ISqlQuery {
   sqlCompiler.resetParams()
   
   const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
@@ -181,20 +181,26 @@ function UpsertCompiler({_values, _table, _conflitcColumns}: IBuildableUpsertQue
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
   const updateValues = keys.map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
-  if (!_conflitcColumns || !_conflitcColumns.length) {
-    _conflitcColumns = [...fields];
-  }
+  // if (!_conflictExp || !_conflictExp.length) {
+  //   _conflictExp = [...fields];
+  // }
 
   let sql = `
     INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})
     VALUES (${values.join(', ')})
     ON CONFLICT`;
   
-  if(!_conflitcColumns || !_conflitcColumns.length) {
+  if(!_conflictExp) {
     sql += ` DO NOTHING`;
   } else {
-    sql += `(${_conflitcColumns.map(c => pgBuilder.escapeColumn(c)).join(',')})
-    DO UPDATE SET ${updateValues.join(', ')}`;
+    sql += `(${_conflictExp._columns.map(c => pgBuilder.escapeColumn(c)).join(',')})`;
+    if (Array.isArray(_conflictExp._where) && _conflictExp._where.length > 0) {
+      sql += ` WHERE ${sqlCompiler.compileExp({
+        _operator: 'AND',
+        _operands: _conflictExp._where
+      })}`
+    }
+    sql += `DO UPDATE SET ${updateValues.join(', ')}`;
   }
   sql += ` RETURNING *;`
   
