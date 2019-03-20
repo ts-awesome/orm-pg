@@ -21,7 +21,7 @@
     "inversify": "^5.0.0"
   },
   "peerDependencies": {
-    "@viatsyshyn/ts-orm": "~0.1.5",
+    "@viatsyshyn/ts-orm": "~0.1.7",
     "pg": "^7.0.0",
     "inversify": "^5.0.0"
   },
