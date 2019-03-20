@@ -181,10 +181,6 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
   const updateValues = keys.map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
-  // if (!_conflictExp || !_conflictExp.length) {
-  //   _conflictExp = [...fields];
-  // }
-
   let sql = `
     INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})
     VALUES (${values.join(', ')})
@@ -193,14 +189,14 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
   if(!_conflictExp) {
     sql += ` DO NOTHING`;
   } else {
-    sql += `(${_conflictExp._columns.map(c => pgBuilder.escapeColumn(c)).join(',')})`;
+    sql += ` (${_conflictExp._columns.map(c => pgBuilder.escapeColumn(c)).join(',')})`;
     if (Array.isArray(_conflictExp._where) && _conflictExp._where.length > 0) {
       sql += ` WHERE ${sqlCompiler.compileExp({
         _operator: 'AND',
         _operands: _conflictExp._where
       })}`
     }
-    sql += `DO UPDATE SET ${updateValues.join(', ')}`;
+    sql += ` DO UPDATE SET ${updateValues.join(', ')}`;
   }
   sql += ` RETURNING *;`
   
