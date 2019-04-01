@@ -37,7 +37,7 @@ const sqlCompiler = {
 
   compileOrderExp(expr: {_column: string, _order: string} | {_column: string, _order: string}[]): string {
     if (Array.isArray(expr)) {
-      return expr.map(item => this.compileExp(item)).join(', ');
+      return expr.map(item => this.compileOrderExp(item)).join(', ');
     }
     const {_column, _order} = expr;
     return `${pgBuilder.escapeColumn(_column)} ${_order}`;
