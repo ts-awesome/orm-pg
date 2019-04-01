@@ -8,7 +8,8 @@ import {
   IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
   DbValueType,
-  IExpr
+  IExpr,
+  Order
 } from '@viatsyshyn/ts-orm';
 
 import {ISqlQuery} from './interfaces';
@@ -34,6 +35,14 @@ const sqlCompiler = {
   _paramCount: 0,
   _paramMap: new Map<DbValueType, number>(),
 
+  compileOrderExp(expr: {_column: string, _order: string} | {_column: string, _order: string}[]): string {
+    if (Array.isArray(expr)) {
+      return expr.map(item => this.compileExp(item)).join(', ');
+    }
+    const {_column, _order} = expr;
+    return `${pgBuilder.escapeColumn(_column)} ${_order}`;
+  },
+
   // generic
   compileExp(expr: IExpr | IExpr[] | 'NULL' | '*' | any): string {
     if (Array.isArray(expr)) {
@@ -44,6 +53,7 @@ const sqlCompiler = {
     if (expr === '*') return '*';
 
     const {_column, _func, _args, _operator, _operands} = expr as IExpr;
+
     if (_column) {
       return pgBuilder.escapeColumn(_column);
     }
@@ -137,7 +147,7 @@ function SelectCompiler(query: IBuildableSelectQuery): ISqlQuery {
 
   const {_orderBy, _limit, _offset} = query;
   if (Array.isArray(_orderBy) && _orderBy.length) {
-    sql += ' ORDER BY ' + sqlCompiler.compileExp(_orderBy)
+    sql += ' ORDER BY ' + sqlCompiler.compileOrderExp(_orderBy)
   }
 
   if (_limit) {
