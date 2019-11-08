@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc && cp src/*.d.ts dist/src/",
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
@@ -15,7 +15,7 @@
     "@types/yesql": "^3.2.1",
     "@types/pg": "^7.0.0",
     "@types/inversify": "^2.0.33",
-    "typescript": "^3.3.3",
+    "typescript": "^3.7.2",
     "@viatsyshyn/ts-orm": "~0.1.9",
     "pg": "^7.0.0",
     "inversify": "^5.0.0"

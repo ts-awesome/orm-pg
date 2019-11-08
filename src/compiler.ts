@@ -9,7 +9,6 @@ import {
   IBuildableSubSelectQuery,
   DbValueType,
   IExpr,
-  Order
 } from '@viatsyshyn/ts-orm';
 
 import {ISqlQuery} from './interfaces';
@@ -58,7 +57,7 @@ const sqlCompiler = {
       return pgBuilder.escapeColumn(_column);
     }
     if (_func) {
-      return `${_func}(${_args!.map(arg => this.compileExp(arg)).join(', ')})`;
+      return `${_func}(${_args!.map((arg: any) => this.compileExp(arg)).join(', ')})`;
     }
     if (_operator) {
       switch (_operator) {
@@ -81,10 +80,18 @@ const sqlCompiler = {
       }
     }
 
+    let wrapper = undefined;
+    if (typeof expr === 'object' && expr.value) {
+      wrapper = expr.wrapper;
+      expr = expr.value;
+    }
+
     if (!this._paramMap.has(expr)) {
       this._paramMap.set(expr, this._paramCount++);
     }
-    return `:${pgBuilder.getParam(this._paramMap.get(expr))}`;
+
+    const value = `:${pgBuilder.getParam(this._paramMap.get(expr))}`;
+    return wrapper?.(value) ?? value;
   },
 
   processColumns(columns?: (IExpr|string)[]) {
@@ -184,8 +191,8 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
 }
 
 function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery): ISqlQuery {
-  sqlCompiler.resetParams()
-  
+  sqlCompiler.resetParams();
+
   const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
   const fields = keys.map(field => pgBuilder.escapeColumn(field));
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
@@ -195,11 +202,11 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
     INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})
     VALUES (${values.join(', ')})
     ON CONFLICT`;
-  
+
   if(!_conflictExp) {
     sql += ` DO NOTHING`;
   } else {
-    sql += ` (${_conflictExp._columns.map(c => pgBuilder.escapeColumn(c)).join(',')})`;
+    sql += ` (${_conflictExp._columns.map((c: any) => pgBuilder.escapeColumn(c)).join(',')})`;
     if (Array.isArray(_conflictExp._where) && _conflictExp._where.length > 0) {
       sql += ` WHERE ${sqlCompiler.compileExp({
         _operator: 'AND',
@@ -208,8 +215,8 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
     }
     sql += ` DO UPDATE SET ${updateValues.join(', ')}`;
   }
-  sql += ` RETURNING *;`
-  
+  sql += ` RETURNING *;`;
+
   const params = sqlCompiler.collectParams();
   return {
     sql,
