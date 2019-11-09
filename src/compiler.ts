@@ -91,7 +91,7 @@ const sqlCompiler = {
     }
 
     const value = `:${pgBuilder.getParam(this._paramMap.get(expr))}`;
-    return wrapper?.(value) ?? value;
+    return wrapper ? wrapper(value) : value;
   },
 
   processColumns(columns?: (IExpr|string)[]) {

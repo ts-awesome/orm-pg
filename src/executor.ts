@@ -11,7 +11,7 @@ import {
   FkViolatedDbError
 } from "./errors";
 
-//Add TIME_STAMPT parser
+// Add TIME_STAMPT parser
 const TIME_STAMPT_CODE = 1114;
 (<any>types).setTypeParser(TIME_STAMPT_CODE, (val: string) => {
   return new Date(val.replace(' ', 'T') + 'Z');
@@ -20,7 +20,7 @@ const TIME_STAMPT_CODE = 1114;
 @injectable()
 export class PgExecutor implements IQueryExecutor<ISqlQuery> {
 
-  constructor(private queryExecutor: Pool | PoolClient) {}
+  constructor(private readonly queryExecutor: Pool | PoolClient) {}
 
   public async execute<TResult>(sqlQuery: ISqlQuery): Promise<IQueryData[]> {
     if (!sqlQuery || !sqlQuery.sql || sqlQuery.sql.trim() === "") {

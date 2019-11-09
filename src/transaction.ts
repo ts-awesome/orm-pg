@@ -2,16 +2,21 @@ import {PoolClient} from 'pg';
 import {PgExecutor} from './executor';
 import {ISqlQuery} from './interfaces';
 import {injectable} from 'inversify';
-import {ISqlTransaction} from '@viatsyshyn/ts-orm';
+import {ITransaction} from '@viatsyshyn/ts-orm';
+
+const COMMIT = 'COMMIT';
+const ROLLBACK = 'ROLLBACK';
+
+export const TRANSACTION_ALREADY_RESOLVED_ERROR = 'Tractions is already resolved.';
 
 @injectable()
-export class PgTransaction extends PgExecutor implements ISqlTransaction<ISqlQuery> {
-  private conn: PoolClient;
+export class PgTransaction extends PgExecutor implements ITransaction<ISqlQuery> {
   private isFinished = false;
 
-  constructor(conn: PoolClient) {
+  constructor(
+    private readonly conn: PoolClient
+  ) {
     super(conn);
-    this.conn = conn;
   }
 
   public get finished(): boolean {
@@ -20,19 +25,27 @@ export class PgTransaction extends PgExecutor implements ISqlTransaction<ISqlQue
 
   public async commit(): Promise<void> {
     if (this.finished) {
-      throw new Error();
+      throw new Error(TRANSACTION_ALREADY_RESOLVED_ERROR);
     }
 
-    await this.conn.query('COMMIT');
-    this.conn.release();
+    try {
+      await this.conn.query(COMMIT);
+    } finally {
+      this.conn.release();
+      this.isFinished = true;
+    }
   }
 
   public async rollback(): Promise<void> {
     if (this.finished) {
-      throw new Error();
+      throw new Error(TRANSACTION_ALREADY_RESOLVED_ERROR);
     }
 
-    await this.conn.query('ROLLBACK');
-    this.conn.release();
+    try {
+      await this.conn.query(ROLLBACK);
+    } finally {
+      this.conn.release();
+      this.isFinished = true;
+    }
   }
 }

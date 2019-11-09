@@ -1,6 +1,6 @@
 {
   "name": "@viatsyshyn/ts-orm-pg",
-  "version": "0.1.2",
+  "version": "0.0.0",
   "description": "TypeScript ORM Postgres Driver",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,12 +16,12 @@
     "@types/pg": "^7.0.0",
     "@types/inversify": "^2.0.33",
     "typescript": "^3.7.2",
-    "@viatsyshyn/ts-orm": "~0.1.9",
+    "@viatsyshyn/ts-orm": "~0.2.0",
     "pg": "^7.0.0",
     "inversify": "^5.0.0"
   },
   "peerDependencies": {
-    "@viatsyshyn/ts-orm": "~0.1.9",
+    "@viatsyshyn/ts-orm": "~0.2.0",
     "pg": "^7.0.0",
     "inversify": "^5.0.0"
   },
