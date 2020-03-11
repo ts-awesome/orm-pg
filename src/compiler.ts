@@ -84,6 +84,8 @@ const sqlCompiler = {
     if (typeof expr === 'object' && expr.value !== undefined) {
       wrapper = expr.wrapper;
       expr = expr.value;
+    } else if (typeof expr === 'object') {
+      throw new Error(`Property "value" is required, got ${JSON.stringify(expr)}`);
     }
 
     if (expr === null) {
