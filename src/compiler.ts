@@ -86,6 +86,10 @@ const sqlCompiler = {
       expr = expr.value;
     }
 
+    if (expr === null) {
+      return 'NULL';
+    }
+
     if (!this._paramMap.has(expr)) {
       this._paramMap.set(expr, this._paramCount++);
     }
