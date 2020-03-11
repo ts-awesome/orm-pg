@@ -81,7 +81,7 @@ const sqlCompiler = {
     }
 
     let wrapper = undefined;
-    if (typeof expr === 'object' && expr.value) {
+    if (typeof expr === 'object' && expr.value !== undefined) {
       wrapper = expr.wrapper;
       expr = expr.value;
     }
