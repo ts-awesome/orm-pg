@@ -14,7 +14,7 @@
     "suppressImplicitAnyIndexErrors": true,
     "strictNullChecks": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": ".."
   },
   "exclude": [
     "node_modules",

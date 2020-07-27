@@ -39,7 +39,7 @@ const sqlCompiler = {
       return expr.map(item => this.compileOrderExp(item)).join(', ');
     }
     const {_column, _order} = expr;
-    return `${pgBuilder.escapeColumn(_column)} ${_order}`;
+    return `${pgBuilder.escapeColumn(_column)} ${_order ?? 'ASC'}`;
   },
 
   // generic
@@ -186,7 +186,7 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   const fields = keys.map(field => pgBuilder.escapeColumn(field));
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
 
-  let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')})  RETURNING *;`;
+  let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')}) RETURNING *;`;
 
   const params = sqlCompiler.collectParams();
 
@@ -204,10 +204,9 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
   const updateValues = keys.map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
-  let sql = `
-    INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})
-    VALUES (${values.join(', ')})
-    ON CONFLICT`;
+  let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})` +
+    ` VALUES (${values.join(', ')})` +
+    ` ON CONFLICT`;
 
   if(!_conflictExp) {
     sql += ` DO NOTHING`;
