@@ -119,24 +119,34 @@ describe('Compiler', () => {
       expect(result).toStrictEqual(expectation);
     });
 
-    it('Columns', () => {
+    it('Columns list', () => {
       const query = Select(Person).columns(['name', 'age']);
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT "${tableName}"."name", "${tableName}"."age" FROM "${tableName}"`;
       expect(result).toStrictEqual(expectation);
     });
 
-    it('Columns', () => {
+    it('Columns with column builder', () => {
       const query = Select(Person).columns(model => [model.name, model.age]);
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT "${tableName}"."name", "${tableName}"."age" FROM "${tableName}"`;
       expect(result).toStrictEqual(expectation);
     });
 
-    it('Columns', () => {
+    it('Columns with alias and function', () => {
       const query = Select(Person).columns(model => [alias(model.name, 'PersonAge'), max(model.age)]);
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ("${tableName}"."name") AS "PersonAge", MAX("${tableName}"."age") FROM "${tableName}"`;
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Columns with alias and operator', () => {
+      const ageAlias = 'AgePusFive';
+      const additionalYears = 5;
+      const query = Select(Person).columns(model => [alias(model.age.add(additionalYears), ageAlias)]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT (("${tableName}"."age" + :p0)) AS "${ageAlias}" FROM "${tableName}"`;
+      expectation.params = {p0: additionalYears};
       expect(result).toStrictEqual(expectation);
     });
   });

@@ -8,7 +8,7 @@ import {
   IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
   DbValueType,
-  IExpr,
+  IExpression,
 } from '@viatsyshyn/ts-orm';
 
 import {ISqlQuery} from './interfaces';
@@ -43,7 +43,7 @@ const sqlCompiler = {
   },
 
   // generic
-  compileExp(expr: IExpr | IExpr[] | 'NULL' | '*' | any): string {
+  compileExp(expr: IExpression | IExpression[] | any): string {
     if (Array.isArray(expr)) {
       return `(${expr.map(item => this.compileExp(item)).join(', ')})`;
     }
@@ -51,7 +51,7 @@ const sqlCompiler = {
     if (expr === 'NULL') return 'NULL';
     if (expr === '*') return '*';
 
-    const {_column, _func, _args, _operator, _operands} = expr as IExpr;
+    const {_column, _func, _args, _operator, _operands} = expr as any;
 
     if (_column) {
       return pgBuilder.escapeColumn(_column);
@@ -76,7 +76,7 @@ const sqlCompiler = {
         case 'BETWEEN':
           return `(${this.compileExp(_operands![0])} BETWEEN ${this.compileExp(_operands![1])} AND ${this.compileExp(_operands![2])})`;
         default:
-          return `(${(_operands! as IExpr[]).map(operand => this.compileExp(operand)).join(` ${_operator} `)})`;
+          return `(${(_operands! as IExpression[]).map(operand => this.compileExp(operand)).join(` ${_operator} `)})`;
       }
     }
 
@@ -100,13 +100,13 @@ const sqlCompiler = {
     return wrapper ? wrapper(value) : value;
   },
 
-  processColumns(columns?: (IExpr|string)[]) {
+  processColumns(columns?: (IExpression|string)[]) {
     if (!Array.isArray(columns) || columns.length < 1) {
       return '*'
     }
 
     return columns.map(column => {
-      const {_alias, _operands} = column as IExpr;
+      const {_alias, _operands} = column as any;
       if (_alias) return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumn(_alias)}`;
       return typeof column === 'string' ? column : this.compileExp(column);
     }).join(', ')
