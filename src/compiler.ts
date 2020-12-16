@@ -9,7 +9,7 @@ import {
   IBuildableSubSelectQuery,
   DbValueType,
   IExpr,
-} from '@viatsyshyn/ts-orm';
+} from '@ts-awesome/orm';
 
 import {ISqlQuery} from './interfaces';
 import {injectable} from "inversify";
