@@ -60,6 +60,7 @@ const sqlCompiler = {
       return `${_func}(${_args!.map((arg: any) => this.compileExp(arg)).join(', ')})`;
     }
     if (_operator) {
+      // noinspection FallThroughInSwitchStatementJS
       switch (_operator) {
         case 'NOT':
           return `NOT (${this.compileExp(_operands![0])})`;
@@ -75,6 +76,14 @@ const sqlCompiler = {
           return `(${SubSelectBuilder(_operands![0] as IBuildableSubSelectQuery)})`;
         case 'BETWEEN':
           return `(${this.compileExp(_operands![0])} BETWEEN ${this.compileExp(_operands![1])} AND ${this.compileExp(_operands![2])})`;
+        case 'IN':
+          const ops = _operands! as IExpr[];
+          if (ops.length === 2 && Array.isArray(ops[1])) {
+            const values = ops[1] as any[];
+            if (values.length === 0) {
+              return `(TRUE = FALSE)`;
+            }
+          }
         default:
           return `(${(_operands! as IExpr[]).map(operand => this.compileExp(operand)).join(` ${_operator} `)})`;
       }
