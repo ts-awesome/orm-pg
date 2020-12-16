@@ -1,5 +1,5 @@
 {
-  "name": "@viatsyshyn/ts-orm-pg",
+  "name": "@ts-awesome/orm-pg",
   "version": "0.0.0",
   "description": "TypeScript ORM Postgres Driver",
   "main": "dist/index.js",
@@ -26,5 +26,5 @@
     "inversify": "^5.0.0"
   },
   "author": "Volodymyr Iatsyshyn <viatsyshyn@gmail.com>",
-  "license": "ISC"
+  "license": "MIT"
 }
