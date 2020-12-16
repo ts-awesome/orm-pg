@@ -4,3 +4,4 @@ export * from './compiler';
 export * from './transaction';
 export * from './executor';
 export * from './driver';
+export * from './kinds';
