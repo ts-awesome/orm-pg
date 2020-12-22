@@ -22,7 +22,7 @@
   },
   "peerDependencies": {
     "@ts-awesome/orm": "^1.0.0",
-    "pg": "^7.0.0",
+    "pg": "^7.0.0 || ^8.0.0",
     "inversify": "^5.0.0"
   },
   "author": "Volodymyr Iatsyshyn <viatsyshyn@gmail.com>",
