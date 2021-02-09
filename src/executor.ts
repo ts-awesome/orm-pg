@@ -1,6 +1,6 @@
 import {Pool, PoolClient, types} from "pg";
 import * as yesql from "yesql";
-import {IQueryData, IQueryExecutor} from "@viatsyshyn/ts-orm";
+import {IQueryData, IQueryExecutor} from "@ts-awesome/orm";
 import {injectable} from "inversify";
 import {ISqlQuery} from "./interfaces";
 import {

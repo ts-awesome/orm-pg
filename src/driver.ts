@@ -1,6 +1,6 @@
 import {Pool} from 'pg';
 
-import {IQueryDriver, ITransaction} from '@viatsyshyn/ts-orm';
+import {IQueryDriver, ITransaction} from '@ts-awesome/orm';
 import {PgExecutor} from './executor';
 import {PgTransaction} from './transaction';
 import {injectable, unmanaged} from 'inversify';

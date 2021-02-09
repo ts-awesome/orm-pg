@@ -1,5 +1,5 @@
 {
-  "name": "@viatsyshyn/ts-orm-pg",
+  "name": "@ts-awesome/orm-pg",
   "version": "0.0.0",
   "description": "TypeScript ORM Postgres Driver",
   "main": "dist/index.js",
@@ -14,22 +14,22 @@
     "yesql": "^3.2.2"
   },
   "devDependencies": {
+    "@ts-awesome/orm": "^1.0.1",
     "@types/inversify": "^2.0.33",
     "@types/jest": "^26.0.5",
     "@types/pg": "^7.1.0",
     "@types/yesql": "^3.2.2",
-    "@viatsyshyn/ts-orm": "~0.2.0",
     "inversify": "^5.0.0",
     "jest": "^26.1.0",
     "pg": "^7.0.0",
     "ts-jest": "^26.1.3",
-    "typescript": "^3.7.2"
+    "typescript": "^4.1.4"
   },
   "peerDependencies": {
-    "@viatsyshyn/ts-orm": "~0.2.0",
-    "pg": "^7.0.0",
-    "inversify": "^5.0.0"
+    "@ts-awesome/orm": "^1.0.0",
+    "inversify": "^5.0.0",
+    "pg": "^7.0.0 || ^8.0.0"
   },
   "author": "Volodymyr Iatsyshyn <viatsyshyn@gmail.com>",
-  "license": "ISC"
+  "license": "MIT"
 }

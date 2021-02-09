@@ -1,4 +1,4 @@
-import { dbField, dbTable } from '@viatsyshyn/ts-orm';
+import { dbField, dbTable } from '@ts-awesome/orm';
 
 @dbTable('Person', [{name: 'id', fields: ['id']}])
 export class Person {
@@ -6,16 +6,16 @@ export class Person {
     primaryKey: true,
     autoIncrement: true
   })
-  id: number;
+  id!: number;
 
-  @dbField()
-  name: string;
+  @dbField
+  name!: string;
 
-  @dbField()
-  age: number;
+  @dbField
+  age!: number;
 
-  @dbField()
-  city: string;
+  @dbField
+  city!: string;
 }
 
 @dbTable('Employee')
@@ -26,14 +26,14 @@ export class Employee {
       autoIncrement: true
     }
   )
-  id: number;
+  id!: number;
 
-  @dbField()
-  personId: number;
+  @dbField
+  personId!: number;
 
-  @dbField()
-  company: string;
+  @dbField
+  company!: string;
 
-  @dbField()
-  salary: number;
+  @dbField
+  salary!: number;
 }

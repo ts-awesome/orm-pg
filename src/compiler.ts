@@ -9,7 +9,8 @@ import {
   IBuildableSubSelectQuery,
   DbValueType,
   IExpression,
-} from '@viatsyshyn/ts-orm';
+  IExpr,
+} from '@ts-awesome/orm';
 
 import {ISqlQuery} from './interfaces';
 import {injectable} from "inversify";
@@ -60,6 +61,7 @@ const sqlCompiler = {
       return `${_func}(${_args!.map((arg: any) => this.compileExp(arg)).join(', ')})`;
     }
     if (_operator) {
+      // noinspection FallThroughInSwitchStatementJS
       switch (_operator) {
         case 'NOT':
           return `NOT (${this.compileExp(_operands![0])})`;
@@ -75,6 +77,14 @@ const sqlCompiler = {
           return `(${SubSelectBuilder(_operands![0] as IBuildableSubSelectQuery)})`;
         case 'BETWEEN':
           return `(${this.compileExp(_operands![0])} BETWEEN ${this.compileExp(_operands![1])} AND ${this.compileExp(_operands![2])})`;
+        case 'IN':
+          const ops = _operands! as IExpr[];
+          if (ops.length === 2 && Array.isArray(ops[1])) {
+            const values = ops[1] as any[];
+            if (values.length === 0) {
+              return `(TRUE = FALSE)`;
+            }
+          }
         default:
           return `(${(_operands! as IExpression[]).map(operand => this.compileExp(operand)).join(` ${_operator} `)})`;
       }
@@ -100,9 +110,9 @@ const sqlCompiler = {
     return wrapper ? wrapper(value) : value;
   },
 
-  processColumns(columns?: (IExpression|string)[]) {
+  processColumns(tableName: string, columns?: (IExpression|string)[]) {
     if (!Array.isArray(columns) || columns.length < 1) {
-      return '*'
+      return pgBuilder.escapeTable(tableName) + '.*';
     }
 
     return columns.map(column => {
@@ -126,8 +136,8 @@ const sqlCompiler = {
   }
 };
 
-function SubSelectBuilder({_columns, _table, _where, _groupBy, _having, _joins}: IBuildableSubSelectQuery): string {
-  let sql = `SELECT ${sqlCompiler.processColumns(_columns)} FROM ${pgBuilder.escapeTable(_table.tableName)}`;
+function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _having, _joins}: IBuildableSubSelectQuery): string {
+  let sql = `SELECT ${_distinct === true ? 'DISTINCT' : 'ALL'} ${sqlCompiler.processColumns(_table.tableName, _columns)} FROM ${pgBuilder.escapeTable(_table.tableName)}`;
 
   if (Array.isArray(_joins) && _joins.length) {
     sql += ' ' + _joins.map(({_table, _condition, _type = 'INNER', _alias = null}: any) => {

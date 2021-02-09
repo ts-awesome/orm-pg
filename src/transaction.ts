@@ -2,7 +2,7 @@ import {PoolClient} from 'pg';
 import {PgExecutor} from './executor';
 import {ISqlQuery} from './interfaces';
 import {injectable} from 'inversify';
-import {ITransaction} from '@viatsyshyn/ts-orm';
+import {ITransaction} from '@ts-awesome/orm';
 
 const COMMIT = 'COMMIT';
 const ROLLBACK = 'ROLLBACK';

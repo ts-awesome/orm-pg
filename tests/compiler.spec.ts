@@ -6,9 +6,9 @@ import {
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-} from '@viatsyshyn/ts-orm';
+  TableRef
+} from '@ts-awesome/orm';
 import { Employee, Person } from './models';
-import { TableRef } from '@viatsyshyn/ts-orm/dist/builder';
 
 describe('Compiler', () => {
   const pgCompiler = new PgCompiler();
@@ -29,28 +29,28 @@ describe('Compiler', () => {
     it('Group by', () => {
       const query = Select(Person).groupBy(['age']);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" GROUP BY ("${tableName}"."age")`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" GROUP BY ("${tableName}"."age")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('ASC Order by', () => {
       const query = Select(Person).orderBy(model => [model.age]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" ORDER BY "${tableName}"."age" ASC`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" ORDER BY "${tableName}"."age" ASC`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('DESC Order by', () => {
       const query = Select(Person).orderBy(model => [desc(model.age)]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" ORDER BY "${tableName}"."age" DESC`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" ORDER BY "${tableName}"."age" DESC`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Where clause', () => {
       const query = Select(Person).where(model => model.age.gte(person.age));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" WHERE (("${tableName}"."age" >= :p0))`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE (("${tableName}"."age" >= :p0))`;
       expectation.params = {p0: person.age};
       expect(result).toStrictEqual(expectation);
     });
@@ -59,7 +59,7 @@ describe('Compiler', () => {
       const [lowerBound, upperBound] = [18, 27];
       const query = Select(Person).groupBy(model => [model.city]).having(model => and(model.age.gte(lowerBound), model.age.lte(upperBound)));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" GROUP BY ("${tableName}"."city") HAVING ((("${tableName}"."age" >= :p0) AND ("${tableName}"."age" <= :p1)))`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" GROUP BY ("${tableName}"."city") HAVING ((("${tableName}"."age" >= :p0) AND ("${tableName}"."age" <= :p1)))`;
       expectation.params = {p0: person.age, p1: upperBound};
       expect(result).toStrictEqual(expectation);
     });
@@ -67,28 +67,28 @@ describe('Compiler', () => {
     it('Inner join', () => {
       const query = Select(Person).join(Employee, (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" INNER JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" INNER JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Full outer join', () => {
       const query = Select(Person).joinFull(Employee, (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" FULL OUTER JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" FULL OUTER JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Left join', () => {
       const query = Select(Person).joinLeft(Employee, (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" LEFT JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" LEFT JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Right join', () => {
       const query = Select(Person).joinRight(Employee, (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" RIGHT JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" RIGHT JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
@@ -99,14 +99,14 @@ describe('Compiler', () => {
         tableRef,
         (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" INNER JOIN "Employee" AS "${tableRef.tableName}" ON ("${tableRef.tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" INNER JOIN "Employee" AS "${tableRef.tableName}" ON ("${tableName}"."id" = "${tableRef.tableName}"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Limit', () => {
       const query = Select(Person).limit(limit);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" LIMIT :p0`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" LIMIT :p0`;
       expectation.params = {p0: limit};
       expect(result).toStrictEqual(expectation);
     });
@@ -114,7 +114,7 @@ describe('Compiler', () => {
     it('Offset', () => {
       const query = Select(Person).offset(offset);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT * FROM "${tableName}" OFFSET :p0`;
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" OFFSET :p0`;
       expectation.params = {p0: offset};
       expect(result).toStrictEqual(expectation);
     });
@@ -122,21 +122,21 @@ describe('Compiler', () => {
     it('Columns list', () => {
       const query = Select(Person).columns(['name', 'age']);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT "${tableName}"."name", "${tableName}"."age" FROM "${tableName}"`;
+      expectation.sql = `SELECT ALL "${tableName}"."name", "${tableName}"."age" FROM "${tableName}"`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Columns with column builder', () => {
       const query = Select(Person).columns(model => [model.name, model.age]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT "${tableName}"."name", "${tableName}"."age" FROM "${tableName}"`;
+      expectation.sql = `SELECT ALL "${tableName}"."name", "${tableName}"."age" FROM "${tableName}"`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Columns with alias and function', () => {
       const query = Select(Person).columns(model => [alias(model.name, 'PersonAge'), max(model.age)]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ("${tableName}"."name") AS "PersonAge", MAX("${tableName}"."age") FROM "${tableName}"`;
+      expectation.sql = `SELECT ALL ("${tableName}"."name") AS "PersonAge", MAX("${tableName}"."age") FROM "${tableName}"`;
       expect(result).toStrictEqual(expectation);
     });
 
@@ -145,7 +145,7 @@ describe('Compiler', () => {
       const additionalYears = 5;
       const query = Select(Person).columns(model => [alias(model.age.add(additionalYears), ageAlias)]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT (("${tableName}"."age" + :p0)) AS "${ageAlias}" FROM "${tableName}"`;
+      expectation.sql = `SELECT ALL (("${tableName}"."age" + :p0)) AS "${ageAlias}" FROM "${tableName}"`;
       expectation.params = {p0: additionalYears};
       expect(result).toStrictEqual(expectation);
     });
@@ -238,7 +238,7 @@ describe('Compiler', () => {
       .where(() => of(Employee, 'salary').gte(salary))
       .groupBy(({id}) => [id]);
     const result = pgCompiler.compile(query);
-    expectation.sql = `SELECT ("${tableName}"."name") AS "${nameAlias}", "${tableName}"."age" FROM "${tableName}"` +
+    expectation.sql = `SELECT ALL ("${tableName}"."name") AS "${nameAlias}", "${tableName}"."age" FROM "${tableName}"` +
       ` INNER JOIN "${empTableName}" ON ("${tableName}"."id" = "${empTableName}"."personId")` +
       ` WHERE ((("${tableName}"."age" >= :p0) AND ("${tableName}"."city" LIKE :p1)) AND ("${empTableName}"."salary" >= :p2))` +
       ` GROUP BY ("Person"."id")`;

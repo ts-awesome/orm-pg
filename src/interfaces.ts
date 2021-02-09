@@ -1,4 +1,4 @@
-import {DbValueType} from '@viatsyshyn/ts-orm';
+import {DbValueType} from '@ts-awesome/orm';
 
 export interface ISqlQuery {
   sql: string
