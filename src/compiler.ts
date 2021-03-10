@@ -8,9 +8,12 @@ import {
   IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
   DbValueType,
-  IExpression,
   IExpr,
 } from '@ts-awesome/orm';
+
+import {
+  IExpression
+} from "@ts-awesome/orm/dist/intermediate";
 
 import {ISqlQuery} from './interfaces';
 import {injectable} from "inversify";
