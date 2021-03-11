@@ -1,12 +1,18 @@
 import { dbField, dbTable } from '@ts-awesome/orm';
+import {UID} from "../src";
 
-@dbTable('Person', [{name: 'id', fields: ['id']}])
+@dbTable('Person', [{name: 'idx', fields: ['id']}])
 export class Person {
   @dbField({
     primaryKey: true,
     autoIncrement: true
   })
   id!: number;
+
+  @dbField({
+    kind: UID,
+  })
+  uid!: string;
 
   @dbField
   name!: string;

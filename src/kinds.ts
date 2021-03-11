@@ -2,10 +2,10 @@ import {DbValueType, IDbField} from "@ts-awesome/orm";
 
 export const UID: IDbField = {
   readQuery(name) {
-    return `HEX(${name}})`;
+    return `HEX(${name})`;
   },
   writeQuery(name) {
-    return `UNHEX(${name}})`;
+    return `UNHEX(${name})`;
   },
 };
 

@@ -8,7 +8,7 @@ import {
   IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
   DbValueType,
-  IExpr,
+  IExpr, IColumnRef,
 } from '@ts-awesome/orm';
 
 import {
@@ -20,11 +20,19 @@ import {injectable} from "inversify";
 
 const pgBuilder = {
   // pg specific
-  escapeColumn(column: string) {
-    if (column.indexOf('.')) {
-      return column.split('.').map(x => `"${x}"`).join('.')
+  escapeColumnRef(column: IColumnRef) {
+    const {name, table, wrapper} = column;
+    let value = pgBuilder.escapeColumnName(name);
+    if (table) {
+      value = `${pgBuilder.escapeTable(table)}.${value}`;
     }
-    return `"${column}"`;
+    if (typeof wrapper === 'function') {
+      value = wrapper(value);
+    }
+    return value;
+  },
+  escapeColumnName(name: string) {
+    return `"${name}"`;
   },
   escapeTable(table: string) {
     return `"${table}"`
@@ -38,12 +46,12 @@ const sqlCompiler = {
   _paramCount: 0,
   _paramMap: new Map<DbValueType, number>(),
 
-  compileOrderExp(expr: {_column: string, _order: string} | {_column: string, _order: string}[]): string {
+  compileOrderExp(expr: {_column: IColumnRef, _order?: string} | {_column: IColumnRef, _order?: string}[]): string {
     if (Array.isArray(expr)) {
       return expr.map(item => this.compileOrderExp(item)).join(', ');
     }
     const {_column, _order} = expr;
-    return `${pgBuilder.escapeColumn(_column)} ${_order ?? 'ASC'}`;
+    return `${pgBuilder.escapeColumnRef(_column)} ${_order ?? 'ASC'}`;
   },
 
   // generic
@@ -58,7 +66,7 @@ const sqlCompiler = {
     const {_column, _func, _args, _operator, _operands} = expr as any;
 
     if (_column) {
-      return pgBuilder.escapeColumn(_column);
+      return pgBuilder.escapeColumnRef(_column);
     }
     if (_func) {
       return `${_func}(${_args!.map((arg: any) => this.compileExp(arg)).join(', ')})`;
@@ -119,8 +127,8 @@ const sqlCompiler = {
     }
 
     return columns.map(column => {
-      const {_alias, _operands} = column as any;
-      if (_alias) return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumn(_alias)}`;
+      const {_alias, _operands} = column as any as {_alias: string; _operands: IExpression[]};
+      if (_alias) return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumnName(_alias)}`;
       return typeof column === 'string' ? column : this.compileExp(column);
     }).join(', ')
   },
@@ -196,7 +204,7 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   sqlCompiler.resetParams();
 
   const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
-  const fields = keys.map(field => pgBuilder.escapeColumn(field));
+  const fields = keys.map(field => pgBuilder.escapeColumnName(field));
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
 
   let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')}) RETURNING *;`;
@@ -213,9 +221,9 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
   sqlCompiler.resetParams();
 
   const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
-  const fields = keys.map(field => pgBuilder.escapeColumn(field));
+  const fields = keys.map(field => pgBuilder.escapeColumnName(field));
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
-  const updateValues = keys.map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
+  const updateValues = keys.map(field => `${pgBuilder.escapeColumnName(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
   let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})` +
     ` VALUES (${values.join(', ')})` +
@@ -224,7 +232,7 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
   if(!_conflictExp) {
     sql += ` DO NOTHING`;
   } else {
-    sql += ` (${_conflictExp._columns.map((c: any) => pgBuilder.escapeColumn(c)).join(',')})`;
+    sql += ` (${_conflictExp._columns.map((c: any) => pgBuilder.escapeColumnName(c)).join(',')})`;
     if (Array.isArray(_conflictExp._where) && _conflictExp._where.length > 0) {
       sql += ` WHERE ${sqlCompiler.compileExp({
         _operator: 'AND',
@@ -248,7 +256,7 @@ function UpdateCompiler({_values, _where, _table, _limit}: IBuildableUpdateQuery
   const values = Object
     .keys(_values)
     .filter(field => _values[field] !== undefined)
-    .map(field => `${pgBuilder.escapeColumn(field)} = ${sqlCompiler.compileExp(_values[field])}`);
+    .map(field => `${pgBuilder.escapeColumnName(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
   let sql = `UPDATE ${pgBuilder.escapeTable(_table.tableName)} SET ${values.join(', ')}`;
 
