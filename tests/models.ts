@@ -1,5 +1,9 @@
-import { dbField, dbTable } from '@ts-awesome/orm';
-import {UID} from "../src";
+import {dbField, dbTable, IDbField} from '@ts-awesome/orm';
+
+export const UID: IDbField = {
+  readQuery(name) { return `HEX(${name})`},
+  writeQuery(name) { return `UNHEX(${name})`},
+};
 
 @dbTable('Person', [{name: 'idx', fields: ['id']}])
 export class Person {
