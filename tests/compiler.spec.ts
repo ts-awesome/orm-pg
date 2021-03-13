@@ -1,20 +1,21 @@
 import 'reflect-metadata';
-import { PgCompiler } from '../src';
+import { PgCompiler } from '../dist';
 import {
   alias,
   and, Delete,
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-  TableRef
+  TableRef,
 } from '@ts-awesome/orm';
+import {readModelMeta} from '@ts-awesome/orm/dist/builder';
 import { Employee, Person } from './models';
 
 describe('Compiler', () => {
   const pgCompiler = new PgCompiler();
   const expectation = {sql: '', params: {}};
-  const tableName = (Person.prototype as any).tableInfo.tableName;
-  const empTableName = (Employee.prototype as any).tableInfo.tableName;
+  const tableName = readModelMeta(Person).tableName;
+  const empTableName = readModelMeta(Employee).tableName;
   const person: InstanceType<typeof Person> = {id: 1, name: 'Name', age: 18, city: 'City', uid: '123'};
   const limit = 10;
   const offset = 5;

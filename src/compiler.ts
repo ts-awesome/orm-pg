@@ -8,7 +8,7 @@ import {
   IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
   DbValueType,
-  IExpr, IColumnRef,
+  IExpr, IColumnRef, IJoin,
 } from '@ts-awesome/orm';
 
 import {
@@ -63,7 +63,13 @@ const sqlCompiler = {
     if (expr === 'NULL') return 'NULL';
     if (expr === '*') return '*';
 
-    const {_column, _func, _args, _operator, _operands} = expr as any;
+    const {_column, _func, _args, _operator, _operands} = expr as {
+      _column?: IColumnRef,
+      _func?: string,
+      _args?: IExpression[],
+      _operator?: string,
+      _operands?: IExpression[],
+    };
 
     if (_column) {
       return pgBuilder.escapeColumnRef(_column);
@@ -151,8 +157,8 @@ function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _havin
   let sql = `SELECT ${_distinct === true ? 'DISTINCT' : 'ALL'} ${sqlCompiler.processColumns(_table.tableName, _columns)} FROM ${pgBuilder.escapeTable(_table.tableName)}`;
 
   if (Array.isArray(_joins) && _joins.length) {
-    sql += ' ' + _joins.map(({_table, _condition, _type = 'INNER', _alias = null}: any) => {
-      return `${_type} JOIN ${pgBuilder.escapeTable(_table)}${_alias ? ` AS ${pgBuilder.escapeTable(_alias)}` : ''} ON ${sqlCompiler.compileExp(_condition)}`;
+    sql += ' ' + _joins.map(({_tableName, _condition, _type = 'INNER', _alias}: IJoin) => {
+      return `${_type} JOIN ${pgBuilder.escapeTable(_tableName)}${_alias ? ` AS ${pgBuilder.escapeTable(_alias)}` : ''} ON ${sqlCompiler.compileExp(_condition)}`;
     }).join (' ');
   }
 
