@@ -74,36 +74,38 @@ const sqlCompiler = {
     if (_column) {
       return pgBuilder.escapeColumnRef(_column);
     }
-    if (_func) {
-      return `${_func}(${_args!.map((arg: any) => this.compileExp(arg)).join(', ')})`;
+    if (_func && _args) {
+      return `${_func}(${_args.map((arg: any) => this.compileExp(arg)).join(', ')})`;
     }
-    if (_operator) {
+    if (_operator && _operands) {
       // noinspection FallThroughInSwitchStatementJS
       switch (_operator) {
         case 'NOT':
-          return `NOT (${this.compileExp(_operands![0])})`;
+          return `NOT (${this.compileExp(_operands[0])})`;
         case 'ANY':
         case 'ALL':
         case 'EXISTS':
-          if ((_operands![0] as IBuildableSubSelectQuery)._table) {
-            return `${_operator} (${SubSelectBuilder(_operands![0] as IBuildableSubSelectQuery)})`;
+          if ((_operands[0] as IBuildableSubSelectQuery)._table) {
+            return `${_operator} (${SubSelectBuilder(_operands[0] as IBuildableSubSelectQuery)})`;
           } else {
-            return `${_operator} (${this.compileExp(_operands![0])})`;
+            return `${_operator} (${this.compileExp(_operands[0])})`;
           }
         case 'SUBQUERY':
-          return `(${SubSelectBuilder(_operands![0] as IBuildableSubSelectQuery)})`;
+          return `(${SubSelectBuilder(_operands[0] as IBuildableSubSelectQuery)})`;
         case 'BETWEEN':
-          return `(${this.compileExp(_operands![0])} BETWEEN ${this.compileExp(_operands![1])} AND ${this.compileExp(_operands![2])})`;
-        case 'IN':
-          const ops = _operands! as IExpr[];
+          return `(${this.compileExp(_operands[0])} BETWEEN ${this.compileExp(_operands[1])} AND ${this.compileExp(_operands[2])})`;
+        case 'IN': {
+          const ops = _operands as IExpr[];
           if (ops.length === 2 && Array.isArray(ops[1])) {
             const values = ops[1] as any[];
             if (values.length === 0) {
               return `(TRUE = FALSE)`;
             }
           }
+        }
+        // eslint-disable-next-line no-fallthrough
         default:
-          return `(${(_operands! as IExpression[]).map(operand => this.compileExp(operand)).join(` ${_operator} `)})`;
+          return `(${(_operands as IExpression[]).map(operand => this.compileExp(operand)).join(` ${_operator} `)})`;
       }
     }
 
@@ -213,7 +215,7 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   const fields = keys.map(field => pgBuilder.escapeColumnName(field));
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
 
-  let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')}) RETURNING *;`;
+  const sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')}) RETURNING *;`;
 
   const params = sqlCompiler.collectParams();
 
