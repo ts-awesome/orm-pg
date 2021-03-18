@@ -1,4 +1,4 @@
-import {Pool, PoolClient, types} from "pg";
+import {Pool, types} from "pg";
 import * as yesql from "yesql";
 import {IQueryExecutor, reader} from "@ts-awesome/orm";
 import {injectable} from "inversify";
@@ -11,16 +11,21 @@ import {
   FkViolatedDbError
 } from "./errors";
 
-// Add TIME_STAMPT parser
-const TIME_STAMPT_CODE = 1114;
-(<any>types).setTypeParser(TIME_STAMPT_CODE, (val: string) => {
-  return new Date(val.replace(' ', 'T') + 'Z');
-});
+{
+  // Add TIME_STAMP parser
+  const TIME_STAMP_CODE = 1114;
+  (<any>types).setTypeParser(
+    TIME_STAMP_CODE,
+    (val: string) => new Date(val.replace(' ', 'T') + 'Z')
+  );
+}
+
+type PgExecutorClient = Pick<Pool, 'query'>;
 
 @injectable()
 export class PgExecutor implements IQueryExecutor<ISqlQuery> {
 
-  constructor(private readonly queryExecutor: Pool | PoolClient) {}
+  constructor(private readonly queryExecutor: PgExecutorClient) {}
 
   public async execute(sqlQuery: ISqlQuery, Model?: unknown, sensitive = false): Promise<any> {
     if (!sqlQuery || !sqlQuery.sql || sqlQuery.sql.trim() === "") {
@@ -32,6 +37,10 @@ export class PgExecutor implements IQueryExecutor<ISqlQuery> {
       const {rows} = await this.queryExecutor.query(fixedSql);
       return reader(rows, Model as any, sensitive);
     } catch (err) {
+      if (err.code == null) {
+        // comes from reader
+        throw err;
+      }
       switch (err.code) {
         case DUPLICATE_VALUE_DB_ERROR_CODE: throw new DuplicateValueDbError(err);
         case FK_VIOLATES_DB_ERROR_CODE:     throw new FkViolatedDbError(err.detail, err.error);
