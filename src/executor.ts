@@ -1,6 +1,6 @@
 import {Pool, types} from "pg";
 import * as yesql from "yesql";
-import {IQueryExecutor, reader} from "@ts-awesome/orm";
+import {IQueryData, IQueryExecutor, reader, TableMetaProvider} from "@ts-awesome/orm";
 import {injectable} from "inversify";
 import {ISqlQuery} from "./interfaces";
 import {
@@ -27,7 +27,10 @@ export class PgExecutor implements IQueryExecutor<ISqlQuery> {
 
   constructor(private readonly queryExecutor: PgExecutorClient) {}
 
-  public async execute(sqlQuery: ISqlQuery, Model?: unknown, sensitive = false): Promise<any> {
+  public async execute(query: ISqlQuery): Promise<ReadonlyArray<IQueryData>>;
+  public async execute(query: ISqlQuery, scalar: true): Promise<number>;
+  public async execute<X extends TableMetaProvider>(query: ISqlQuery, Model: X, sensitive?: boolean): Promise<ReadonlyArray<InstanceType<X>>>;
+  public async execute(sqlQuery: ISqlQuery, Model?: unknown | true, sensitive = false): Promise<any> {
     if (!sqlQuery || !sqlQuery.sql || sqlQuery.sql.trim() === "") {
       throw new Error("sqlQuery is not provided");
     }
