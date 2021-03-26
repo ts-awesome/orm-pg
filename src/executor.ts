@@ -40,15 +40,14 @@ export class PgExecutor implements IQueryExecutor<ISqlQuery> {
     try {
       ({rows} = await this.queryExecutor.query(fixedSql));
     } catch (err) {
-      if (err.code == null) {
+      if (err.code == null || err.detail == null) {
         // comes from reader
         throw err;
       }
-      console.error('DB_ERROR', err);
       switch (err.code) {
         case DUPLICATE_VALUE_DB_ERROR_CODE: throw new DuplicateValueDbError(err);
         case FK_VIOLATES_DB_ERROR_CODE:     throw new FkViolatedDbError(err.detail, err.error);
-        default:                            throw new DbError(err.code, undefined, err.detail, err.error);
+        default:                            throw new DbError(err.code, undefined, err.detail ?? err.message, err.error?.stack ?? err.error ?? err?.stack);
       }
     }
     return reader(rows, Model as any, sensitive);
