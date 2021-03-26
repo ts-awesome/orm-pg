@@ -36,19 +36,21 @@ export class PgExecutor implements IQueryExecutor<ISqlQuery> {
     }
 
     const fixedSql = yesql.pg(sqlQuery.sql)(sqlQuery.params ?? {});
+    let rows = [];
     try {
-      const {rows} = await this.queryExecutor.query(fixedSql);
-      return reader(rows, Model as any, sensitive);
+      ({rows} = await this.queryExecutor.query(fixedSql));
     } catch (err) {
       if (err.code == null) {
         // comes from reader
         throw err;
       }
+      console.error('DB_ERROR', err);
       switch (err.code) {
         case DUPLICATE_VALUE_DB_ERROR_CODE: throw new DuplicateValueDbError(err);
         case FK_VIOLATES_DB_ERROR_CODE:     throw new FkViolatedDbError(err.detail, err.error);
         default:                            throw new DbError(err.code, undefined, err.detail, err.error);
       }
     }
+    return reader(rows, Model as any, sensitive);
   }
 }
