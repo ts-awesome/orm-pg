@@ -1,6 +1,5 @@
 import {
   IBuildableQuery,
-  IBuildableQueryCompiler,
   IBuildableSelectQuery,
   IBuildableInsertQuery,
   IBuildableUpdateQuery,
@@ -17,6 +16,7 @@ import {
 
 import {ISqlQuery} from './interfaces';
 import {injectable} from "inversify";
+import {BaseCompiler} from "@ts-awesome/orm/dist/base";
 
 const pgBuilder = {
   // pg specific
@@ -314,7 +314,7 @@ function DeleteCompiler({_where, _table, _limit}: IBuildableDeleteQuery): ISqlQu
 }
 
 @injectable()
-export class PgCompiler implements IBuildableQueryCompiler<ISqlQuery> {
+export class PgCompiler extends BaseCompiler<ISqlQuery> {
   compile(query: IBuildableQuery): ISqlQuery {
     switch (query._type) {
       case 'SELECT': return SelectCompiler(query);

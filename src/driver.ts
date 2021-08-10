@@ -8,11 +8,13 @@ import { ISqlQuery } from './interfaces';
 
 const BEGIN = 'BEGIN';
 
+type PgTransactionalExecutor = Pick<Pool, 'query' | 'connect' | 'end'>;
+
 @injectable()
 export class PgDriver extends PgExecutor
   implements IQueryDriver<ISqlQuery> {
   constructor(
-    @unmanaged() private readonly pool: Pool
+    @unmanaged() private readonly pool: PgTransactionalExecutor
   ) {
     super(pool);
   }
