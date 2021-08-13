@@ -64,6 +64,14 @@ describe('Compiler', () => {
       expect(result).toStrictEqual(expectation);
     });
 
+    it('SELECT uid column', () => {
+      const query = Select(Person).columns(x => [x.uid]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL HEX("${tableName}"."uid") AS "uid" FROM "${tableName}"`;
+      expectation.params = {};
+      expect(result).toStrictEqual(expectation);
+    });
+
     it('Having clause', () => {
       const [lowerBound, upperBound] = [18, 27];
       const query = Select(Person).groupBy(model => [model.city]).having(model => and(model.age.gte(lowerBound), model.age.lte(upperBound)));

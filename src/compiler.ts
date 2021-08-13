@@ -7,7 +7,9 @@ import {
   IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
   DbValueType,
-  IExpr, IColumnRef, IJoin,
+  IExpr,
+  IColumnRef,
+  IJoin,
 } from '@ts-awesome/orm';
 
 import {
@@ -134,9 +136,14 @@ const sqlCompiler = {
       return pgBuilder.escapeTable(tableName) + '.*';
     }
 
-    return columns.map(column => {
-      const {_alias, _operands} = column as any as {_alias: string; _operands: IExpression[]};
-      if (_alias) return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumnName(_alias)}`;
+    return columns.map((column, idx) => {
+      const {_alias, _operands, _column} = column as any as {_alias: string; _operands: IExpression[], _column: IColumnRef};
+      if (_alias) {
+        return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumnName(_alias)}`;
+      }
+      if (typeof _column?.name === 'string' && _column.wrapper != null) {
+        return `${this.compileExp(column)} AS ${pgBuilder.escapeColumnName(_column?.name)}`;
+      }
       return typeof column === 'string' ? column : this.compileExp(column);
     }).join(', ')
   },

@@ -10,3 +10,18 @@ export const DB_JSON: IDbField = {
     return JSON.stringify(value);
   }
 };
+
+export const DB_EMAIL: IDbField = {
+  reader(raw: DbValueType): DbValueType {
+    return typeof raw === 'string' ? raw.toLowerCase() : raw
+  },
+  writer(value): DbValueType {
+    return typeof value === 'string' ? value.toLowerCase() : value
+  },
+  readQuery(name: string): string {
+    return `lower(${name})`
+  },
+  writeQuery(name: string): string {
+    return `lower(${name})`
+  }
+}
