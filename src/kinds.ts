@@ -19,7 +19,7 @@ export const DB_JSON: IDbField = {
  * @link https://dba.stackexchange.com/questions/68266/what-is-the-best-way-to-store-an-email-address-in-postgresql
  */
 export const DB_EMAIL: IDbField = {
-  reader(value): DbValueType {
+  reader(value: DbValueType) {
     return typeof value === 'string' ? value.toLowerCase() : value
   },
   writer(value): DbValueType {
