@@ -32,8 +32,8 @@ export class PgExecutor extends BaseExecutor<ISqlQuery> {
   protected async do(input: ISqlQuery): Promise<readonly IQueryData[]> {
     const query = this.prepareQuery(input);
     try {
-      const {rows} = await this.queryExecutor.query(query);
-      return rows;
+      const {rows, rowCount} = await this.queryExecutor.query(query);
+      return rowCount > 0 ? rows : [];
     } catch (err) {
       if (err.code == null || err.detail == null) {
         // keep as is
