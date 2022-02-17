@@ -6,7 +6,7 @@ import {
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-  TableRef,
+  TableRef, dbTable, dbField,
 } from '@ts-awesome/orm';
 import {readModelMeta} from '@ts-awesome/orm/dist/builder';
 import { Employee, Person } from './models';
@@ -61,6 +61,22 @@ describe('Compiler', () => {
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE ((HEX("${tableName}"."uid") <> :p0))`;
       expectation.params = {p0: person.uid};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Where clause with date', () => {
+      const now = new Date;
+      const tableName = 'dated'
+      @dbTable(tableName)
+      class DatedModel {
+        @dbField
+        created!: Date;
+      }
+
+      const query = Select(DatedModel).where(model => model.created.neq(now));
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE (("${tableName}"."created" <> :p0))`;
+      expectation.params = {p0: now.toISOString()};
       expect(result).toStrictEqual(expectation);
     });
 

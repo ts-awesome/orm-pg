@@ -115,6 +115,8 @@ const sqlCompiler = {
     if (typeof expr === 'object' && expr.value !== undefined) {
       wrapper = expr.wrapper;
       expr = expr.value;
+    } else if (expr instanceof Date) {
+      expr = expr.toISOString();
     } else if (typeof expr === 'object') {
       throw new Error(`Property "value" is required, got ${JSON.stringify(expr)}`);
     }
