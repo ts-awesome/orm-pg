@@ -1,8 +1,10 @@
 import {DbValueType} from '@ts-awesome/orm';
 
 export interface ISqlQuery {
-  sql: string
-  params?: {[key: string]: DbValueType}
+  sql: string;
+  params?: {
+    [key: string]: DbValueType;
+  };
 }
 
 export interface IPgErrorResult {

@@ -1,20 +1,21 @@
 import 'reflect-metadata';
-import { PgCompiler } from '../src';
+import { PgCompiler } from '../dist';
 import {
   alias,
   and, Delete,
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-  TableRef
+  TableRef, dbTable, dbField,
 } from '@ts-awesome/orm';
+import {readModelMeta} from '@ts-awesome/orm/dist/builder';
 import { Employee, Person } from './models';
 
 describe('Compiler', () => {
   const pgCompiler = new PgCompiler();
   const expectation = {sql: '', params: {}};
-  const tableName = (Person.prototype as any).tableInfo.tableName;
-  const empTableName = (Employee.prototype as any).tableInfo.tableName;
+  const tableName = readModelMeta(Person).tableName;
+  const empTableName = readModelMeta(Employee).tableName;
   const person: InstanceType<typeof Person> = {id: 1, name: 'Name', age: 18, city: 'City', uid: '123'};
   const limit = 10;
   const offset = 5;
@@ -60,6 +61,30 @@ describe('Compiler', () => {
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE ((HEX("${tableName}"."uid") <> :p0))`;
       expectation.params = {p0: person.uid};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Where clause with date', () => {
+      const now = new Date;
+      const tableName = 'dated'
+      @dbTable(tableName)
+      class DatedModel {
+        @dbField
+        created!: Date;
+      }
+
+      const query = Select(DatedModel).where(model => model.created.neq(now));
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE (("${tableName}"."created" <> :p0))`;
+      expectation.params = {p0: now.toISOString()};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('SELECT uid column', () => {
+      const query = Select(Person).columns(x => [x.uid]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL HEX("${tableName}"."uid") AS "uid" FROM "${tableName}"`;
+      expectation.params = {};
       expect(result).toStrictEqual(expectation);
     });
 

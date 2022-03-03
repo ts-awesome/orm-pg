@@ -1,6 +1,5 @@
 import {
   IBuildableQuery,
-  IBuildableQueryCompiler,
   IBuildableSelectQuery,
   IBuildableInsertQuery,
   IBuildableUpdateQuery,
@@ -8,7 +7,9 @@ import {
   IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
   DbValueType,
-  IExpr, IColumnRef,
+  IExpr,
+  IColumnRef,
+  IJoin,
 } from '@ts-awesome/orm';
 
 import {
@@ -17,6 +18,7 @@ import {
 
 import {ISqlQuery} from './interfaces';
 import {injectable} from "inversify";
+import {BaseCompiler} from "@ts-awesome/orm/dist/base";
 
 const pgBuilder = {
   // pg specific
@@ -63,41 +65,49 @@ const sqlCompiler = {
     if (expr === 'NULL') return 'NULL';
     if (expr === '*') return '*';
 
-    const {_column, _func, _args, _operator, _operands} = expr as any;
+    const {_column, _func, _args, _operator, _operands} = expr as {
+      _column?: IColumnRef,
+      _func?: string,
+      _args?: IExpression[],
+      _operator?: string,
+      _operands?: IExpression[],
+    };
 
     if (_column) {
       return pgBuilder.escapeColumnRef(_column);
     }
-    if (_func) {
-      return `${_func}(${_args!.map((arg: any) => this.compileExp(arg)).join(', ')})`;
+    if (_func && _args) {
+      return `${_func}(${_args.map((arg: any) => this.compileExp(arg)).join(', ')})`;
     }
-    if (_operator) {
+    if (_operator && _operands) {
       // noinspection FallThroughInSwitchStatementJS
       switch (_operator) {
         case 'NOT':
-          return `NOT (${this.compileExp(_operands![0])})`;
+          return `NOT (${this.compileExp(_operands[0])})`;
         case 'ANY':
         case 'ALL':
         case 'EXISTS':
-          if ((_operands![0] as IBuildableSubSelectQuery)._table) {
-            return `${_operator} (${SubSelectBuilder(_operands![0] as IBuildableSubSelectQuery)})`;
+          if ((_operands[0] as IBuildableSubSelectQuery)._table) {
+            return `${_operator} (${SubSelectBuilder(_operands[0] as IBuildableSubSelectQuery)})`;
           } else {
-            return `${_operator} (${this.compileExp(_operands![0])})`;
+            return `${_operator} (${this.compileExp(_operands[0])})`;
           }
         case 'SUBQUERY':
-          return `(${SubSelectBuilder(_operands![0] as IBuildableSubSelectQuery)})`;
+          return `(${SubSelectBuilder(_operands[0] as IBuildableSubSelectQuery)})`;
         case 'BETWEEN':
-          return `(${this.compileExp(_operands![0])} BETWEEN ${this.compileExp(_operands![1])} AND ${this.compileExp(_operands![2])})`;
-        case 'IN':
-          const ops = _operands! as IExpr[];
+          return `(${this.compileExp(_operands[0])} BETWEEN ${this.compileExp(_operands[1])} AND ${this.compileExp(_operands[2])})`;
+        case 'IN': {
+          const ops = _operands as IExpr[];
           if (ops.length === 2 && Array.isArray(ops[1])) {
             const values = ops[1] as any[];
             if (values.length === 0) {
               return `(TRUE = FALSE)`;
             }
           }
+        }
+        // eslint-disable-next-line no-fallthrough
         default:
-          return `(${(_operands! as IExpression[]).map(operand => this.compileExp(operand)).join(` ${_operator} `)})`;
+          return `(${(_operands as IExpression[]).map(operand => this.compileExp(operand)).join(` ${_operator} `)})`;
       }
     }
 
@@ -105,6 +115,8 @@ const sqlCompiler = {
     if (typeof expr === 'object' && expr.value !== undefined) {
       wrapper = expr.wrapper;
       expr = expr.value;
+    } else if (expr instanceof Date) {
+      expr = expr.toISOString();
     } else if (typeof expr === 'object') {
       throw new Error(`Property "value" is required, got ${JSON.stringify(expr)}`);
     }
@@ -126,9 +138,14 @@ const sqlCompiler = {
       return pgBuilder.escapeTable(tableName) + '.*';
     }
 
-    return columns.map(column => {
-      const {_alias, _operands} = column as any as {_alias: string; _operands: IExpression[]};
-      if (_alias) return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumnName(_alias)}`;
+    return columns.map((column, idx) => {
+      const {_alias, _operands, _column} = column as any as {_alias: string; _operands: IExpression[], _column: IColumnRef};
+      if (_alias) {
+        return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumnName(_alias)}`;
+      }
+      if (typeof _column?.name === 'string' && _column.wrapper != null) {
+        return `${this.compileExp(column)} AS ${pgBuilder.escapeColumnName(_column?.name)}`;
+      }
       return typeof column === 'string' ? column : this.compileExp(column);
     }).join(', ')
   },
@@ -151,8 +168,8 @@ function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _havin
   let sql = `SELECT ${_distinct === true ? 'DISTINCT' : 'ALL'} ${sqlCompiler.processColumns(_table.tableName, _columns)} FROM ${pgBuilder.escapeTable(_table.tableName)}`;
 
   if (Array.isArray(_joins) && _joins.length) {
-    sql += ' ' + _joins.map(({_table, _condition, _type = 'INNER', _alias = null}: any) => {
-      return `${_type} JOIN ${pgBuilder.escapeTable(_table)}${_alias ? ` AS ${pgBuilder.escapeTable(_alias)}` : ''} ON ${sqlCompiler.compileExp(_condition)}`;
+    sql += ' ' + _joins.map(({_tableName, _condition, _type = 'INNER', _alias}: IJoin) => {
+      return `${_type} JOIN ${pgBuilder.escapeTable(_tableName)}${_alias ? ` AS ${pgBuilder.escapeTable(_alias)}` : ''} ON ${sqlCompiler.compileExp(_condition)}`;
     }).join (' ');
   }
 
@@ -207,7 +224,7 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   const fields = keys.map(field => pgBuilder.escapeColumnName(field));
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
 
-  let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')}) RETURNING *;`;
+  const sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')}) RETURNING *;`;
 
   const params = sqlCompiler.collectParams();
 
@@ -306,7 +323,7 @@ function DeleteCompiler({_where, _table, _limit}: IBuildableDeleteQuery): ISqlQu
 }
 
 @injectable()
-export class PgCompiler implements IBuildableQueryCompiler<ISqlQuery> {
+export class PgCompiler extends BaseCompiler<ISqlQuery> {
   compile(query: IBuildableQuery): ISqlQuery {
     switch (query._type) {
       case 'SELECT': return SelectCompiler(query);

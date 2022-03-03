@@ -7,14 +7,16 @@ import {ITransaction} from '@ts-awesome/orm';
 const COMMIT = 'COMMIT';
 const ROLLBACK = 'ROLLBACK';
 
-export const TRANSACTION_ALREADY_RESOLVED_ERROR = 'Tractions is already resolved.';
+export const TRANSACTION_ALREADY_RESOLVED_ERROR = 'Transaction is already resolved.';
+
+export type PgTransactionalExecutorClient = Pick<PoolClient, 'query' | 'release'>;
 
 @injectable()
 export class PgTransaction extends PgExecutor implements ITransaction<ISqlQuery> {
   private isFinished = false;
 
   constructor(
-    private readonly conn: PoolClient
+    private readonly conn: PgTransactionalExecutorClient
   ) {
     super(conn);
   }

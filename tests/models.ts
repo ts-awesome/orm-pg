@@ -1,6 +1,12 @@
 import {dbField, dbTable, IDbField} from '@ts-awesome/orm';
 
 export const UID: IDbField = {
+  reader(raw) {
+    return typeof raw === 'string' ? raw.toLowerCase() : raw
+  },
+  writer(raw) {
+    return typeof raw === 'string' ? raw.toLowerCase() : raw
+  },
   readQuery(name) { return `HEX(${name})`},
   writeQuery(name) { return `UNHEX(${name})`},
 };

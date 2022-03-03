@@ -33,7 +33,7 @@ export class DuplicateValueDbError extends DbError {
 
     this.table = pgErrorResult.table;
 
-    let details = pgErrorResult.detail;
+    const details = pgErrorResult.detail;
     if (details) {
       this.column = details.slice(details.indexOf('(') + 1, details.indexOf(')'));
       this.value = details.slice(details.lastIndexOf('(') + 1, details.lastIndexOf(')'));
