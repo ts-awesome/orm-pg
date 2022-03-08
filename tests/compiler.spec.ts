@@ -9,7 +9,7 @@ import {
   TableRef, dbTable, dbField,
 } from '@ts-awesome/orm';
 import {readModelMeta} from '@ts-awesome/orm/dist/builder';
-import { Employee, Person } from './models';
+import {Employee, Person, UID} from './models';
 
 describe('Compiler', () => {
   const pgCompiler = new PgCompiler();
@@ -191,6 +191,28 @@ describe('Compiler', () => {
       const result = pgCompiler.compile(query);
       expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) RETURNING *;`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('All defaults', () => {
+      @dbTable(tableName)
+      class WithDefaults {
+        @dbField({
+          primaryKey: true,
+          autoIncrement: true
+        })
+        id!: number;
+
+        @dbField({
+          kind: UID,
+        })
+        uid!: string;
+      }
+
+      const query = Insert(WithDefaults).values({});
+      const result = pgCompiler.compile(query);
+      expectation.sql = `INSERT INTO "${tableName}" DEFAULT VALUES RETURNING *;`;
+      expectation.params = {};
       expect(result).toStrictEqual(expectation);
     });
   });
