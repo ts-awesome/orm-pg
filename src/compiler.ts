@@ -222,6 +222,15 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
 
   const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
   const fields = keys.map(field => pgBuilder.escapeColumnName(field));
+
+  // ALL DEFAULT VALUES special case
+  if (fields.length === 0) {
+    return {
+      sql: `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} DEFAULT VALUES RETURNING *;`,
+      params: {}
+    };
+  }
+
   const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
 
   const sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')}) RETURNING *;`;
