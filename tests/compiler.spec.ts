@@ -6,7 +6,7 @@ import {
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-  TableRef, dbTable, dbField,
+  TableRef, dbTable, dbField, exists,
 } from '@ts-awesome/orm';
 import {readModelMeta} from '@ts-awesome/orm/dist/builder';
 import {Employee, Person, UID} from './models';
@@ -79,6 +79,15 @@ describe('Compiler', () => {
       expectation.params = {p0: now.toISOString()};
       expect(result).toStrictEqual(expectation);
     });
+
+    it('subquery on self', () => {
+      const query = Select(Person).where(({id}) => exists(Select(alias(Person, 'Person_a')).where(({id: _}) => _.eq(id))));
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE (EXISTS (SELECT ALL "${tableName}_a".* FROM "${tableName}" AS "${tableName}_a" WHERE (("${tableName}_a"."id" = "${tableName}"."id"))))`;
+      expectation.params = {};
+      expect(result).toStrictEqual(expectation);
+    })
 
     it('SELECT uid column', () => {
       const query = Select(Person).columns(x => [x.uid]);

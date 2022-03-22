@@ -164,31 +164,45 @@ const sqlCompiler = {
   }
 };
 
-function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _having, _joins}: IBuildableSubSelectQuery): string {
-  let sql = `SELECT ${_distinct === true ? 'DISTINCT' : 'ALL'} ${sqlCompiler.processColumns(_table.tableName, _columns)} FROM ${pgBuilder.escapeTable(_table.tableName)}`;
+function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _having, _joins, _alias}: IBuildableSubSelectQuery): string {
+  const sql = [
+    'SELECT',
+    _distinct === true ? 'DISTINCT' : 'ALL',
+    sqlCompiler.processColumns(_alias || _table.tableName, _columns),
+    'FROM',
+    pgBuilder.escapeTable(_table.tableName),
+    _alias ? `AS ${pgBuilder.escapeTable(_alias)}` : '',
+  ];
 
   if (Array.isArray(_joins) && _joins.length) {
-    sql += ' ' + _joins.map(({_tableName, _condition, _type = 'INNER', _alias}: IJoin) => {
-      return `${_type} JOIN ${pgBuilder.escapeTable(_tableName)}${_alias ? ` AS ${pgBuilder.escapeTable(_alias)}` : ''} ON ${sqlCompiler.compileExp(_condition)}`;
-    }).join (' ');
+    for(const {_tableName, _condition, _type = 'INNER', _alias} of _joins as IJoin[]) {
+      sql.push(
+        _type,
+        'JOIN',
+        pgBuilder.escapeTable(_tableName),
+        _alias ? `AS ${pgBuilder.escapeTable(_alias)}` : '',
+        'ON',
+        sqlCompiler.compileExp(_condition),
+      );
+    }
   }
 
   if (Array.isArray(_where) && _where.length) {
-    sql += ' WHERE ' + sqlCompiler.compileExp({
+    sql.push('WHERE', sqlCompiler.compileExp({
       _operator: 'AND',
       _operands: _where
-    })
+    }));
   }
 
   if (Array.isArray(_groupBy) && _groupBy.length) {
-    sql += ' GROUP BY ' + sqlCompiler.compileExp(_groupBy)
+    sql.push('GROUP BY', sqlCompiler.compileExp(_groupBy));
   }
 
   if (Array.isArray(_having) && _having.length) {
-    sql += ' HAVING ' + sqlCompiler.compileExp(_having)
+    sql.push('HAVING', sqlCompiler.compileExp(_having));
   }
 
-  return sql;
+  return sql.filter(x => x).join(' ');
 }
 
 function SelectCompiler(query: IBuildableSelectQuery): ISqlQuery {
