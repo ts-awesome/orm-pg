@@ -138,7 +138,7 @@ const sqlCompiler = {
       return pgBuilder.escapeTable(tableName) + '.*';
     }
 
-    return columns.map((column, idx) => {
+    return columns.map((column) => {
       const {_alias, _operands, _column} = column as any as {_alias: string; _operands: IExpression[], _column: IColumnRef};
       if (_alias) {
         return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumnName(_alias)}`;

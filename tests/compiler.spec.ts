@@ -6,7 +6,7 @@ import {
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-  TableRef, dbTable, dbField, exists,
+  TableRef, dbTable, dbField, exists, count,
 } from '@ts-awesome/orm';
 import {readModelMeta} from '@ts-awesome/orm/dist/builder';
 import {Employee, Person, UID} from './models';
@@ -45,6 +45,13 @@ describe('Compiler', () => {
       const query = Select(Person).orderBy(model => [desc(model.age)]);
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" ORDER BY "${tableName}"."age" DESC`;
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('DESC Order by anonymous field', () => {
+      const query = Select(Person).orderBy(() => [desc(of(null, 'score'))]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" ORDER BY "score" DESC`;
       expect(result).toStrictEqual(expectation);
     });
 
@@ -191,6 +198,88 @@ describe('Compiler', () => {
       expectation.params = {p0: additionalYears};
       expect(result).toStrictEqual(expectation);
     });
+
+    it('Where clause with same date multiple times', () => {
+      const now = new Date;
+      const tableName = 'dated'
+      @dbTable(tableName)
+      class DatedModel {
+        @dbField
+        created!: Date;
+      }
+
+      const query = Select(DatedModel).where(model => and(model.created.neq(now), model.created.neq(now), model.created.neq(now)));
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE ((("${tableName}"."created" <> :p0) AND ("${tableName}"."created" <> :p0) AND ("${tableName}"."created" <> :p0)))`;
+      expectation.params = {p0: now.toISOString()};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Where clause with floats', () => {
+      const tableName = 'floated'
+      @dbTable(tableName)
+      class DatedModel {
+        @dbField
+        value!: number;
+      }
+
+      const query = Select(DatedModel).where(model => and(model.value.gte(.5), model.value.neq(.7), model.value.mul(10).gte(50)));
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE ((("${tableName}"."value" >= :p0) AND ("${tableName}"."value" <> :p1) AND (("${tableName}"."value" * :p2) >= :p3)))`;
+      expectation.params = {p0: .5, p1: .7, p2: 10, p3: 50};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('where clause with duplicated params in subqueries', () => {
+      @dbTable('actions')
+      class PersonAction {
+        @dbField public personId!: number;
+        @dbField public action!: string;
+        @dbField public created!: Date;
+      }
+
+      const ts = new Date(Date.now() - 3600);
+
+      const query = Select(Person)
+        .columns(({name}) => [
+          name,
+          alias(
+            Select(PersonAction)
+              .columns(() => [count()])
+              .where(({personId, action, created}) => and(
+                personId.eq(of(Person, 'id')),
+                action.eq('a'),
+                created.gte(ts)
+              ))
+              .asScalar()
+              .mul(1).add(
+              Select(PersonAction)
+                .columns(() => [count()])
+                .where(({personId, action, created}) => and(
+                  personId.eq(of(Person, 'id')),
+                  action.eq('b'),
+                  created.gte(ts)
+                ))
+                .asScalar().mul(.5),
+            ).add(
+              Select(PersonAction)
+                .columns(() => [count()])
+                .where(({personId, action, created}) => and(
+                  personId.eq(of(Person, 'id')),
+                  action.eq('c'),
+                  created.gte(ts)
+                ))
+                .asScalar().mul(.1),
+            ),
+            'score'
+          )
+        ]).orderBy(() => [desc(of(null, 'score'))]).limit(20);
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."name", (((((SELECT ALL COUNT(*) FROM "actions" WHERE ((("actions"."personId" = "${tableName}"."id") AND ("actions"."action" = :p0) AND ("actions"."created" >= :p1)))) * :p2) + ((SELECT ALL COUNT(*) FROM "actions" WHERE ((("actions"."personId" = "${tableName}"."id") AND ("actions"."action" = :p3) AND ("actions"."created" >= :p1)))) * :p4)) + ((SELECT ALL COUNT(*) FROM "actions" WHERE ((("actions"."personId" = "${tableName}"."id") AND ("actions"."action" = :p5) AND ("actions"."created" >= :p1)))) * :p6))) AS "score" FROM "${tableName}" ORDER BY "score" DESC LIMIT :p7`;
+      expectation.params = {p0: 'a', p1: ts.toISOString(), p2: 1, p3: 'b', p4: .5, p5: 'c', p6: .1, p7: 20};
+      expect(result).toStrictEqual(expectation);
+    })
   });
 
   describe('INSERT statement', () => {
