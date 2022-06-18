@@ -96,3 +96,8 @@ Please run following initialization code on your DB
 CREATE EXTENSION citext;
 CREATE DOMAIN Email AS citext CHECK ( value ~ '^[a-zA-Z0-9.!#$%&''*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$' );
 ```
+
+# License
+May be freely distributed under the [MIT license](https://opensource.org/licenses/MIT).
+
+Copyright (c) 2022 Volodymyr Iatsyshyn and other contributors
