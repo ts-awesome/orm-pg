@@ -1,20 +1,18 @@
 import {
+  DbValueType,
+  IBuildableDeleteQuery,
+  IBuildableInsertQuery,
   IBuildableQuery,
   IBuildableSelectQuery,
-  IBuildableInsertQuery,
-  IBuildableUpdateQuery,
-  IBuildableDeleteQuery,
-  IBuildableUpsertQuery,
   IBuildableSubSelectQuery,
-  DbValueType,
-  IExpr,
+  IBuildableUpdateQuery,
+  IBuildableUpsertQuery,
   IColumnRef,
+  IExpr,
   IJoin,
 } from '@ts-awesome/orm';
 
-import {
-  IExpression
-} from "@ts-awesome/orm/dist/intermediate";
+import {IExpression} from "@ts-awesome/orm/dist/intermediate";
 
 import {ISqlQuery} from './interfaces';
 import {injectable} from "inversify";
@@ -22,26 +20,47 @@ import {BaseCompiler} from "@ts-awesome/orm/dist/base";
 
 const pgBuilder = {
   // pg specific
+  escapeLiteral(value: string) {
+    if (value == null) {
+      return 'NULL';
+    }
+
+    if (Array.isArray(value)) {
+      return `(${value.map(this.escapeLiteral).join(', ')})`;
+    }
+
+    const prefix = value.indexOf('\\') >= 0 ? 'E' : ''; // backslash
+    const escaped = value
+      .replace(/'/g, "''")
+      .replace(/\\/g, '\\\\');
+    return `${prefix}'${escaped}'`;
+  },
+  escapeIdentifier(id: string) {
+    return `"${id.replace(/"/g, '""')}"`;
+  },
   escapeColumnRef(column: IColumnRef) {
-    const {name, table, wrapper} = column;
+    const {name, table} = column;
     let value = pgBuilder.escapeColumnName(name);
     if (table) {
       value = `${pgBuilder.escapeTable(table)}.${value}`;
     }
-    if (typeof wrapper === 'function') {
-      value = wrapper(value);
-    }
     return value;
   },
   escapeColumnName(name: string) {
-    return `"${name}"`;
+    return this.escapeIdentifier(name);
   },
   escapeTable(table: string) {
-    return `"${table}"`
+    return this.escapeIdentifier(table)
   },
   getParam(id: number) {
     return `p${id}`;
   },
+  formatNamedParam(name: string) {
+    if (!/^[a-z_][a-z0-9_$]*$/i.test(name)) {
+      throw new Error(`Invalid identifier ${JSON.stringify(name)}`);
+    }
+    return `:${name}`;
+  }
 };
 
 const sqlCompiler = {
@@ -65,16 +84,28 @@ const sqlCompiler = {
     if (expr === 'NULL') return 'NULL';
     if (expr === '*') return '*';
 
-    const {_column, _func, _args, _operator, _operands} = expr as {
+    const {_column, _func, _args, _operator, _operands, _named, _const, _value} = expr as {
       _column?: IColumnRef,
       _func?: string,
       _args?: IExpression[],
       _operator?: string,
       _operands?: IExpression[],
+      _named?: string,
+      _const?: string,
+      _value?: IExpression | IExpression[],
     };
 
+    if (_const) {
+      return pgBuilder.escapeLiteral(_const);
+    }
+    if (_named) {
+      return pgBuilder.formatNamedParam(_named);
+    }
     if (_column) {
       return pgBuilder.escapeColumnRef(_column);
+    }
+    if (_value) {
+      return this.compileExp(_value);
     }
     if (_func && _args) {
       return `${_func}(${_args.map((arg: any) => this.compileExp(arg)).join(', ')})`;
@@ -82,6 +113,8 @@ const sqlCompiler = {
     if (_operator && _operands) {
       // noinspection FallThroughInSwitchStatementJS
       switch (_operator) {
+        case 'NULL':
+          return 'NULL';
         case 'NOT':
           return `NOT (${this.compileExp(_operands[0])})`;
         case 'ANY':
@@ -96,6 +129,8 @@ const sqlCompiler = {
           return `(${SubSelectBuilder(_operands[0] as IBuildableSubSelectQuery)})`;
         case 'BETWEEN':
           return `(${this.compileExp(_operands[0])} BETWEEN ${this.compileExp(_operands[1])} AND ${this.compileExp(_operands[2])})`;
+        case 'CAST':
+          return `CAST(${this.compileExp(_operands[0])} AS ${_operands[1]})`;
         case 'IN': {
           const ops = _operands as IExpr[];
           if (ops.length === 2 && Array.isArray(ops[1])) {
@@ -125,12 +160,15 @@ const sqlCompiler = {
       return 'NULL';
     }
 
+    if (wrapper) {
+      return this.compileExp(wrapper(expr));
+    }
+
     if (!this._paramMap.has(expr)) {
       this._paramMap.set(expr, this._paramCount++);
     }
 
-    const value = `:${pgBuilder.getParam(this._paramMap.get(expr))}`;
-    return wrapper ? wrapper(value) : value;
+    return `:${pgBuilder.getParam(this._paramMap.get(expr))}`;
   },
 
   processColumns(tableName: string, columns?: (IExpression|string)[]) {
@@ -139,12 +177,9 @@ const sqlCompiler = {
     }
 
     return columns.map((column) => {
-      const {_alias, _operands, _column} = column as any as {_alias: string; _operands: IExpression[], _column: IColumnRef};
+      const {_alias, _operands} = column as any as {_alias: string; _operands: IExpression[]};
       if (_alias) {
         return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumnName(_alias)}`;
-      }
-      if (typeof _column?.name === 'string' && _column.wrapper != null) {
-        return `${this.compileExp(column)} AS ${pgBuilder.escapeColumnName(_column?.name)}`;
       }
       return typeof column === 'string' ? column : this.compileExp(column);
     }).join(', ')

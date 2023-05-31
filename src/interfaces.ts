@@ -1,6 +1,6 @@
-import {DbValueType} from '@ts-awesome/orm';
+import {DbValueType, WithParams} from '@ts-awesome/orm';
 
-export interface ISqlQuery {
+export interface ISqlQuery extends WithParams {
   sql: string;
   params?: {
     [key: string]: DbValueType;

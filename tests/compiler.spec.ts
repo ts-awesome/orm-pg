@@ -9,7 +9,7 @@ import {
   TableRef, dbTable, dbField, exists, count,
 } from '@ts-awesome/orm';
 import {readModelMeta} from '@ts-awesome/orm/dist/builder';
-import {Employee, Person, UID} from './models';
+import {Employee, EmployeeWithNames, Person, UID, PersonPrivate} from './models';
 
 describe('Compiler', () => {
   const pgCompiler = new PgCompiler();
@@ -30,48 +30,64 @@ describe('Compiler', () => {
     it('Group by', () => {
       const query = Select(Person).groupBy(['age']);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" GROUP BY ("${tableName}"."age")`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY ("${tableName}"."age")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('ASC Order by', () => {
       const query = Select(Person).orderBy(model => [model.age]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" ORDER BY "${tableName}"."age" ASC`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY "${tableName}"."age" ASC`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('DESC Order by', () => {
       const query = Select(Person).orderBy(model => [desc(model.age)]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" ORDER BY "${tableName}"."age" DESC`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY "${tableName}"."age" DESC`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('DESC Order by anonymous field', () => {
       const query = Select(Person).orderBy(() => [desc(of(null, 'score'))]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" ORDER BY "score" DESC`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY "score" DESC`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Where clause', () => {
       const query = Select(Person).where(model => model.age.gte(person.age));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE (("${tableName}"."age" >= :p0))`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" WHERE (("${tableName}"."age" >= :p0))`;
       expectation.params = {p0: person.age};
       expect(result).toStrictEqual(expectation);
     });
 
-    it('Where clause with uid', () => {
+    it('Encrypted Where clause', () => {
+      const query = Select(PersonPrivate).where(model => model.medical.like('%something%'));
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", (CAST("${tableName}"."email" AS Email)) AS "email", (Pgp_sym_decrypt("${tableName}"."medical", hmac(HEX("${tableName}"."uid"), :shared_key, 'sha256'))) AS "medical" FROM "${tableName}" WHERE ((Pgp_sym_decrypt("${tableName}"."medical", hmac(HEX("${tableName}"."uid"), :shared_key, 'sha256')) LIKE :p0))`;
+      expectation.params = {p0: '%something%'};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Where clause with uid builder', () => {
       const query = Select(Person).where(model => model.uid.neq(person.uid));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE ((HEX("${tableName}"."uid") <> :p0))`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" WHERE ((HEX("${tableName}"."uid") <> :p0))`;
       expectation.params = {p0: person.uid};
       expect(result).toStrictEqual(expectation);
     });
 
-    it('Where clause with date', () => {
+    it('Where clause with uid literal', () => {
+      const query = Select(Person).where({uid: person.uid});
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" WHERE (((HEX("${tableName}"."uid") = :p0)))`;
+      expectation.params = {p0: person.uid};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Where clause with date builder', () => {
       const now = new Date;
       const tableName = 'dated'
       @dbTable(tableName)
@@ -82,7 +98,23 @@ describe('Compiler', () => {
 
       const query = Select(DatedModel).where(model => model.created.neq(now));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE (("${tableName}"."created" <> :p0))`;
+      expectation.sql = `SELECT ALL "${tableName}"."created" FROM "${tableName}" WHERE (("${tableName}"."created" <> :p0))`;
+      expectation.params = {p0: now.toISOString()};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Where clause with date literal', () => {
+      const now = new Date;
+      const tableName = 'dated'
+      @dbTable(tableName)
+      class DatedModel {
+        @dbField
+        created!: Date;
+      }
+
+      const query = Select(DatedModel).where({created: now});
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."created" FROM "${tableName}" WHERE ((("${tableName}"."created" = :p0)))`;
       expectation.params = {p0: now.toISOString()};
       expect(result).toStrictEqual(expectation);
     });
@@ -91,15 +123,23 @@ describe('Compiler', () => {
       const query = Select(Person).where(({id}) => exists(Select(alias(Person, 'Person_a')).where(({id: _}) => _.eq(id))));
 
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE (EXISTS (SELECT ALL "${tableName}_a".* FROM "${tableName}" AS "${tableName}_a" WHERE (("${tableName}_a"."id" = "${tableName}"."id"))))`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" WHERE (EXISTS (SELECT ALL "${tableName}_a"."id", (HEX("${tableName}_a"."uid")) AS "uid", "${tableName}_a"."name", "${tableName}_a"."age", "${tableName}_a"."city" FROM "${tableName}" AS "${tableName}_a" WHERE (("${tableName}_a"."id" = "${tableName}"."id"))))`;
       expectation.params = {};
       expect(result).toStrictEqual(expectation);
     })
 
-    it('SELECT uid column', () => {
+    it('SELECT uid column with literal', () => {
+      const query = Select(Person).columns(['uid']);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL (HEX("${tableName}"."uid")) AS "uid" FROM "${tableName}"`;
+      expectation.params = {};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('SELECT uid column with builder', () => {
       const query = Select(Person).columns(x => [x.uid]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL HEX("${tableName}"."uid") AS "uid" FROM "${tableName}"`;
+      expectation.sql = `SELECT ALL (HEX("${tableName}"."uid")) AS "uid" FROM "${tableName}"`;
       expectation.params = {};
       expect(result).toStrictEqual(expectation);
     });
@@ -108,7 +148,7 @@ describe('Compiler', () => {
       const [lowerBound, upperBound] = [18, 27];
       const query = Select(Person).groupBy(model => [model.city]).having(model => and(model.age.gte(lowerBound), model.age.lte(upperBound)));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" GROUP BY ("${tableName}"."city") HAVING ((("${tableName}"."age" >= :p0) AND ("${tableName}"."age" <= :p1)))`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY ("${tableName}"."city") HAVING ((("${tableName}"."age" >= :p0) AND ("${tableName}"."age" <= :p1)))`;
       expectation.params = {p0: person.age, p1: upperBound};
       expect(result).toStrictEqual(expectation);
     });
@@ -116,28 +156,28 @@ describe('Compiler', () => {
     it('Inner join', () => {
       const query = Select(Person).join(Employee, (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" INNER JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" INNER JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Full outer join', () => {
       const query = Select(Person).joinFull(Employee, (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" FULL OUTER JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" FULL OUTER JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Left join', () => {
       const query = Select(Person).joinLeft(Employee, (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" LEFT JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" LEFT JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Right join', () => {
       const query = Select(Person).joinRight(Employee, (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" RIGHT JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" RIGHT JOIN "Employee" ON ("${tableName}"."id" = "Employee"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
@@ -148,14 +188,14 @@ describe('Compiler', () => {
         tableRef,
         (root, other) => root.id.eq(other.personId));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" INNER JOIN "Employee" AS "${tableRef.tableName}" ON ("${tableName}"."id" = "${tableRef.tableName}"."personId")`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" INNER JOIN "Employee" AS "${tableRef.tableName}" ON ("${tableName}"."id" = "${tableRef.tableName}"."personId")`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('Limit', () => {
       const query = Select(Person).limit(limit);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" LIMIT :p0`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" LIMIT :p0`;
       expectation.params = {p0: limit};
       expect(result).toStrictEqual(expectation);
     });
@@ -163,7 +203,7 @@ describe('Compiler', () => {
     it('Offset', () => {
       const query = Select(Person).offset(offset);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" OFFSET :p0`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" OFFSET :p0`;
       expectation.params = {p0: offset};
       expect(result).toStrictEqual(expectation);
     });
@@ -210,7 +250,7 @@ describe('Compiler', () => {
 
       const query = Select(DatedModel).where(model => and(model.created.neq(now), model.created.neq(now), model.created.neq(now)));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE ((("${tableName}"."created" <> :p0) AND ("${tableName}"."created" <> :p0) AND ("${tableName}"."created" <> :p0)))`;
+      expectation.sql = `SELECT ALL "${tableName}"."created" FROM "${tableName}" WHERE ((("${tableName}"."created" <> :p0) AND ("${tableName}"."created" <> :p0) AND ("${tableName}"."created" <> :p0)))`;
       expectation.params = {p0: now.toISOString()};
       expect(result).toStrictEqual(expectation);
     });
@@ -225,7 +265,7 @@ describe('Compiler', () => {
 
       const query = Select(DatedModel).where(model => and(model.value.gte(.5), model.value.neq(.7), model.value.mul(10).gte(50)));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}".* FROM "${tableName}" WHERE ((("${tableName}"."value" >= :p0) AND ("${tableName}"."value" <> :p1) AND (("${tableName}"."value" * :p2) >= :p3)))`;
+      expectation.sql = `SELECT ALL "${tableName}"."value" FROM "${tableName}" WHERE ((("${tableName}"."value" >= :p0) AND ("${tableName}"."value" <> :p1) AND (("${tableName}"."value" * :p2) >= :p3)))`;
       expectation.params = {p0: .5, p1: .7, p2: 10, p3: 50};
       expect(result).toStrictEqual(expectation);
     });

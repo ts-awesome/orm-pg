@@ -1,8 +1,22 @@
 import 'reflect-metadata';
 import { PgExecutor, DbError, FkViolatedDbError, DuplicateValueDbError } from '../dist';
 import {ReaderError} from "@ts-awesome/model-reader";
+import {NamedParameter} from "@ts-awesome/orm/dist/wrappers";
 
 describe('Executor', () => {
+  it('should include named params', async () => {
+    const executor = new PgExecutor({
+      query(query) {
+        expect(query.text).toBe('SELECT $1')
+        expect(query.values).toStrictEqual([123])
+        return []
+      }
+    } as any);
+
+    executor.setNamedParameter('test', 123)
+    await executor.execute({sql: `SELECT :test`});
+  })
+
   it('should throw DbError', async () => {
     const executor = new PgExecutor({
       query(...args: any[]) {
