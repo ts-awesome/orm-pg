@@ -58,22 +58,22 @@ function pgp_sym_decrypt(
   return new FunctionCall('Pgp_sym_decrypt', [data, key]) as never;
 }
 
-function hmac(
-  data: string | IOperandable<string>,
-  key: string | IOperandable<string>,
-  algorithm = 'sha256'
-): IOperandable<string> & IFunctionCallOperation {
-  return new FunctionCall('hmac', [data, key, new Constant(algorithm)]) as never;
-}
+// export function hmac(
+//   data: string | IOperandable<string>,
+//   key: string | IOperandable<string>,
+//   algorithm = 'sha256'
+// ): IOperandable<string> & IFunctionCallOperation {
+//   return new FunctionCall('hmac', [data, key, new Constant(algorithm)]) as never;
+// }
 
-const namedSharedKey = new NamedParameter('shared_key')
+export const namedSharedKey = new NamedParameter('shared_key')
 
 export const DB_ENCRYPTED_TEXT: IDbField = {
-  readQuery(reference: IOperandable<string>, table: Queryable<{uid: string}>): IOperandable<string> {
-    return pgp_sym_decrypt(reference, hmac(table.uid, namedSharedKey));
+  readQuery(reference: IOperandable<string>): IOperandable<string> {
+    return pgp_sym_decrypt(reference, namedSharedKey);
   },
-  writeQuery(value: IOperandable<string>, table: Queryable<{uid: string}>): IOperandable<string> {
-    return pgp_sym_encrypt(value, hmac(table.uid, namedSharedKey));
+  writeQuery(value: IOperandable<string>): IOperandable<string> {
+    return pgp_sym_encrypt(value, namedSharedKey);
   }
 };
 export const DB_ENCRYPTED_JSON: IDbField = {

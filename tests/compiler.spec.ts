@@ -66,7 +66,7 @@ describe('Compiler', () => {
     it('Encrypted Where clause', () => {
       const query = Select(PersonPrivate).where(model => model.medical.like('%something%'));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", (CAST("${tableName}"."email" AS Email)) AS "email", (Pgp_sym_decrypt("${tableName}"."medical", hmac(HEX("${tableName}"."uid"), :shared_key, 'sha256'))) AS "medical" FROM "${tableName}" WHERE ((Pgp_sym_decrypt("${tableName}"."medical", hmac(HEX("${tableName}"."uid"), :shared_key, 'sha256')) LIKE :p0))`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", (CAST("${tableName}"."email" AS Email)) AS "email", (Pgp_sym_decrypt("${tableName}"."medical", :shared_key)) AS "medical" FROM "${tableName}" WHERE ((Pgp_sym_decrypt("${tableName}"."medical", :shared_key) LIKE :p0))`;
       expectation.params = {p0: '%something%'};
       expect(result).toStrictEqual(expectation);
     });
