@@ -6,10 +6,10 @@ import {
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-  TableRef, dbTable, dbField, exists, count,
+  TableRef, dbTable, dbField, exists, count, case_,
 } from '@ts-awesome/orm';
 import {readModelMeta} from '@ts-awesome/orm/dist/builder';
-import {Employee, EmployeeWithNames, Person, UID, PersonPrivate} from './models';
+import {Employee, EmployeeWithNames, Person, UID, PersonPrivate, TaggedPerson} from './models';
 
 describe('Compiler', () => {
   const pgCompiler = new PgCompiler();
@@ -34,6 +34,20 @@ describe('Compiler', () => {
       expect(result).toStrictEqual(expectation);
     });
 
+    it('FOR', () => {
+      const query = Select(Person, 'NO KEY UPDATE').groupBy(['age']);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY ("${tableName}"."age") FOR NO KEY UPDATE`;
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('DISTINCT', () => {
+      const query = Select(Person, true).groupBy(['age']);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT DISTINCT "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY ("${tableName}"."age")`;
+      expect(result).toStrictEqual(expectation);
+    });
+
     it('ASC Order by', () => {
       const query = Select(Person).orderBy(model => [model.age]);
       const result = pgCompiler.compile(query);
@@ -52,6 +66,13 @@ describe('Compiler', () => {
       const query = Select(Person).orderBy(() => [desc(of(null, 'score'))]);
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY "score" DESC`;
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('DESC Order by index field', () => {
+      const query = Select(Person).orderBy(() => [desc(0)]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 0 DESC`;
       expect(result).toStrictEqual(expectation);
     });
 
@@ -320,6 +341,44 @@ describe('Compiler', () => {
       expectation.params = {p0: 'a', p1: ts.toISOString(), p2: 1, p3: 'b', p4: .5, p5: 'c', p6: .1, p7: 20};
       expect(result).toStrictEqual(expectation);
     })
+
+    it('UNION/INTERSECT/EXCEPT', () => {
+      const query = Select(Person)
+        .columns(['name'])
+        .where(x => x.age.gte(18))
+        .union(true, Select(Person)
+          .columns(['name'])
+          .where(x => x.age.lt(18))
+          .except(true, Select(Person)
+            .columns(['name'])
+            .where(x => x.name.neq('test'))
+          )
+        )
+        .except(Select(Person)
+          .columns(['name'])
+          .where(x => x.city.eq('test'))
+        )
+        .intersect(true, Select(Person)
+          .columns(['name'])
+          .where(x => x.name.neq('test'))
+        )
+        .orderBy(['name']);
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."age" >= :p0)) UNION DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."age" < :p0)) EXCEPT DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."name" <> :p1)) ) ) EXCEPT ALL ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."city" = :p1)) ) INTERSECT DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."name" <> :p1)) ) ORDER BY "Person"."name" ASC`;
+      expectation.params = {p0: 18, p1: 'test'};
+      expect(result).toStrictEqual(expectation);
+    })
+
+    it('CASE', () => {
+      const query = Select(Person)
+        .columns(x => [alias(case_({when: x.age.gte(2), then: 'yes'}, {else: 'no'}), 'dynamic')])
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL (CASE WHEN ("Person"."age" >= :p0) THEN :p1 ELSE :p2) AS "dynamic" FROM "Person"`;
+      expectation.params = {p0: 2, p1: 'yes', p2: 'no'};
+      expect(result).toStrictEqual(expectation);
+    })
   });
 
   describe('INSERT statement', () => {
@@ -327,8 +386,19 @@ describe('Compiler', () => {
     it('Usual clause', () => {
       const query = Insert(Person).values(person);
       const result = pgCompiler.compile(query);
-      expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) RETURNING *;`;
+      expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Insert array', () => {
+      const query = Insert(TaggedPerson).values({
+        personId: person.id,
+        tags: ['123', '234', '345']
+      });
+      const result = pgCompiler.compile(query);
+      expectation.sql = `INSERT INTO "TaggedPerson" ("person_id", "tags") VALUES (:p0, ARRAY [:p1, :p2, :p3]) RETURNING "TaggedPerson"."person_id", "TaggedPerson"."tags";`;
+      expectation.params = {p0: person.id, p1: '123', p2: '234', p3: '345'};
       expect(result).toStrictEqual(expectation);
     });
 
@@ -349,7 +419,7 @@ describe('Compiler', () => {
 
       const query = Insert(WithDefaults).values({});
       const result = pgCompiler.compile(query);
-      expectation.sql = `INSERT INTO "${tableName}" DEFAULT VALUES RETURNING *;`;
+      expectation.sql = `INSERT INTO "${tableName}" DEFAULT VALUES RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid";`;
       expectation.params = {};
       expect(result).toStrictEqual(expectation);
     });
@@ -360,7 +430,7 @@ describe('Compiler', () => {
     it('Usual clause', () => {
       const query = Upsert(Person).values(person);
       const result = pgCompiler.compile(query);
-      expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) ON CONFLICT DO NOTHING RETURNING *;`;
+      expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) ON CONFLICT DO NOTHING RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
       expect(result).toStrictEqual(expectation);
     });
@@ -369,7 +439,7 @@ describe('Compiler', () => {
       // How correctly use where clause in upsert statement?
       const query = Upsert(Person).values(person).conflict('idx').where(model => model.id.eq(person.id));
       const result = pgCompiler.compile(query);
-      expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) ON CONFLICT ("id") DO UPDATE SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) RETURNING *;`;
+      expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) ON CONFLICT ("id") DO UPDATE SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
       expect(result).toStrictEqual(expectation);
     });
@@ -380,15 +450,25 @@ describe('Compiler', () => {
     it('Usual clause', () => {
       const query = Update(Person).values(person);
       const result = pgCompiler.compile(query);
-      expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) RETURNING *;`;
+      expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Update array', () => {
+      const query = Update(TaggedPerson).values({
+        tags: ['123', '234', '345']
+      });
+      const result = pgCompiler.compile(query);
+      expectation.sql = `UPDATE "TaggedPerson" SET "tags" = ARRAY [:p0, :p1, :p2] RETURNING "TaggedPerson"."person_id", "TaggedPerson"."tags";`;
+      expectation.params = {p0: '123', p1: '234', p2: '345'};
       expect(result).toStrictEqual(expectation);
     });
 
     it('With where clause', () => {
       const query = Update(Person).values(person).where(model => model.id.eq(person.id));
       const result = pgCompiler.compile(query);
-      expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) WHERE (("${tableName}"."id" = :p0)) RETURNING *;`;
+      expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) WHERE (("${tableName}"."id" = :p0)) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
       expect(result).toStrictEqual(expectation);
     });
@@ -396,7 +476,7 @@ describe('Compiler', () => {
     it('With limitation', () => {
       const query = Update(Person).values(person).where(model => model.id.eq(person.id)).limit(limit);
       const result = pgCompiler.compile(query);
-      expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) WHERE (("${tableName}"."id" = :p0)) LIMIT :p5 RETURNING *;`;
+      expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) WHERE (("${tableName}"."id" = :p0)) LIMIT :p5 RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid, p5: limit};
       expect(result).toStrictEqual(expectation);
     });
@@ -407,7 +487,7 @@ describe('Compiler', () => {
     it('Usual clause', () => {
       const query = Delete(Person).where(model => model.id.eq(person.id));
       const result = pgCompiler.compile(query);
-      expectation.sql = `DELETE FROM "${tableName}" WHERE (("${tableName}"."id" = :p0)) RETURNING *;`;
+      expectation.sql = `DELETE FROM "${tableName}" WHERE (("${tableName}"."id" = :p0)) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id};
       expect(result).toStrictEqual(expectation);
     });
@@ -415,7 +495,7 @@ describe('Compiler', () => {
     it('With limitation', () => {
       const query = Delete(Person).where(model => model.age.lt(person.age)).limit(limit);
       const result = pgCompiler.compile(query);
-      expectation.sql = `DELETE FROM "${tableName}" WHERE (("${tableName}"."age" < :p0)) LIMIT :p1 RETURNING *;`;
+      expectation.sql = `DELETE FROM "${tableName}" WHERE (("${tableName}"."age" < :p0)) LIMIT :p1 RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.age, p1: limit};
       expect(result).toStrictEqual(expectation);
     });

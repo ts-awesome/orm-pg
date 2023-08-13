@@ -5,6 +5,8 @@ import {NamedParameter} from "@ts-awesome/orm/dist/wrappers";
 
 describe('Executor', () => {
   it('should include named params', async () => {
+    const named = new NamedParameter('test')
+
     const executor = new PgExecutor({
       query(query) {
         expect(query.text).toBe('SELECT $1')
@@ -13,7 +15,7 @@ describe('Executor', () => {
       }
     } as any);
 
-    executor.setNamedParameter('test', 123)
+    executor.setNamedParameter(named, 123)
     await executor.execute({sql: `SELECT :test`});
   })
 

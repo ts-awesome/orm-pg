@@ -72,13 +72,14 @@ const sqlCompiler = {
       return expr.map(item => this.compileOrderExp(item)).join(', ');
     }
     const {_column, _order} = expr;
-    return `${pgBuilder.escapeColumnRef(_column)} ${_order ?? 'ASC'}`;
+    return `${typeof _column === 'number' ? _column : pgBuilder.escapeColumnRef(_column)} ${_order ?? 'ASC'}`;
   },
 
   // generic
-  compileExp(expr: IExpression | IExpression[] | any): string {
+  compileExp(expr: IExpression | IExpression[] | any, nativeArrays = false): string {
     if (Array.isArray(expr)) {
-      return `(${expr.map(item => this.compileExp(item)).join(', ')})`;
+      const inner = expr.map(item => this.compileExp(item)).join(', ');
+      return nativeArrays ? `ARRAY [${inner}]` : `(${inner})`;
     }
     if (expr === null) return 'NULL';
     if (expr === 'NULL') return 'NULL';
@@ -131,6 +132,11 @@ const sqlCompiler = {
           return `(${this.compileExp(_operands[0])} BETWEEN ${this.compileExp(_operands[1])} AND ${this.compileExp(_operands[2])})`;
         case 'CAST':
           return `CAST(${this.compileExp(_operands[0])} AS ${_operands[1]})`;
+        case 'CASE':
+          return `CASE ${_operands.map((x: any) => 'else' in x 
+              ? `ELSE ${this.compileExp(x.else)}` 
+              : `WHEN ${this.compileExp(x.when)} THEN ${this.compileExp(x.then)}`
+          ).join(' ')}`
         case 'IN': {
           const ops = _operands as IExpr[];
           if (ops.length === 2 && Array.isArray(ops[1])) {
@@ -199,7 +205,7 @@ const sqlCompiler = {
   }
 };
 
-function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _having, _joins, _alias}: IBuildableSubSelectQuery): string {
+function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _having, _joins, _alias, _operators}: IBuildableSubSelectQuery): string {
   const sql = [
     'SELECT',
     _distinct === true ? 'DISTINCT' : 'ALL',
@@ -237,6 +243,12 @@ function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _havin
     sql.push('HAVING', sqlCompiler.compileExp(_having));
   }
 
+  if (Array.isArray(_operators)) {
+    for(const {_operator, _distinct, _operand} of _operators) {
+      sql.push(_operator, _distinct ? 'DISTINCT' : 'ALL', '(', SubSelectBuilder(_operand), ')');
+    }
+  }
+
   return sql.filter(x => x).join(' ');
 }
 
@@ -245,7 +257,7 @@ function SelectCompiler(query: IBuildableSelectQuery): ISqlQuery {
 
   let sql = SubSelectBuilder(query);
 
-  const {_orderBy, _limit, _offset} = query;
+  const {_orderBy, _limit, _offset, _for} = query;
   if (Array.isArray(_orderBy) && _orderBy.length) {
     sql += ' ORDER BY ' + sqlCompiler.compileOrderExp(_orderBy)
   }
@@ -258,6 +270,10 @@ function SelectCompiler(query: IBuildableSelectQuery): ISqlQuery {
     sql += ' OFFSET ' + sqlCompiler.compileExp(_offset)
   }
 
+  if (_for) {
+    sql += ' FOR ' + _for
+  }
+
   const params = sqlCompiler.collectParams();
 
   return {
@@ -266,7 +282,7 @@ function SelectCompiler(query: IBuildableSelectQuery): ISqlQuery {
   };
 }
 
-function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
+function InsertCompiler({_values, _table, _columns}: IBuildableInsertQuery): ISqlQuery {
   sqlCompiler.resetParams();
 
   const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
@@ -275,14 +291,26 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   // ALL DEFAULT VALUES special case
   if (fields.length === 0) {
     return {
-      sql: `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} DEFAULT VALUES RETURNING *;`,
+      sql: `INSERT INTO ${
+        pgBuilder.escapeTable(_table.tableName)
+      } DEFAULT VALUES RETURNING ${
+        sqlCompiler.processColumns(_table.tableName, _columns)
+      };`,
       params: {}
     };
   }
 
-  const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
+  const values = keys.map(field => sqlCompiler.compileExp(_values[field], true));
 
-  const sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')}) VALUES (${values.join(', ')}) RETURNING *;`;
+  const sql = `INSERT INTO ${
+        pgBuilder.escapeTable(_table.tableName)
+      } (${
+        fields.join(', ')
+      }) VALUES (${
+        values.join(', ')
+      }) RETURNING ${
+        sqlCompiler.processColumns(_table.tableName, _columns)
+      };`;
 
   const params = sqlCompiler.collectParams();
 
@@ -292,12 +320,12 @@ function InsertCompiler({_values, _table}: IBuildableInsertQuery): ISqlQuery {
   };
 }
 
-function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery): ISqlQuery {
+function UpsertCompiler({_values, _table, _conflictExp, _columns}: IBuildableUpsertQuery): ISqlQuery {
   sqlCompiler.resetParams();
 
   const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
   const fields = keys.map(field => pgBuilder.escapeColumnName(field));
-  const values = keys.map(field => sqlCompiler.compileExp(_values[field]));
+  const values = keys.map(field => sqlCompiler.compileExp(_values[field], true));
   const updateValues = keys.map(field => `${pgBuilder.escapeColumnName(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
   let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})` +
@@ -316,7 +344,9 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
     }
     sql += ` DO UPDATE SET ${updateValues.join(', ')}`;
   }
-  sql += ` RETURNING *;`;
+  sql += ` RETURNING ${
+    sqlCompiler.processColumns(_table.tableName, _columns)
+  };`;
 
   const params = sqlCompiler.collectParams();
   return {
@@ -325,13 +355,13 @@ function UpsertCompiler({_values, _table, _conflictExp}: IBuildableUpsertQuery):
   };
 }
 
-function UpdateCompiler({_values, _where, _table, _limit}: IBuildableUpdateQuery): ISqlQuery {
+function UpdateCompiler({_values, _where, _table, _limit, _columns}: IBuildableUpdateQuery): ISqlQuery {
   sqlCompiler.resetParams();
 
   const values = Object
     .keys(_values)
     .filter(field => _values[field] !== undefined)
-    .map(field => `${pgBuilder.escapeColumnName(field)} = ${sqlCompiler.compileExp(_values[field])}`);
+    .map(field => `${pgBuilder.escapeColumnName(field)} = ${sqlCompiler.compileExp(_values[field], true)}`);
 
   let sql = `UPDATE ${pgBuilder.escapeTable(_table.tableName)} SET ${values.join(', ')}`;
 
@@ -345,7 +375,9 @@ function UpdateCompiler({_values, _where, _table, _limit}: IBuildableUpdateQuery
   if (_limit) {
     sql += ' LIMIT ' + sqlCompiler.compileExp(_limit)
   }
-  sql += ` RETURNING *;`;
+  sql += ` RETURNING ${
+    sqlCompiler.processColumns(_table.tableName, _columns)
+  };`;
 
   const params = sqlCompiler.collectParams();
 
@@ -355,7 +387,7 @@ function UpdateCompiler({_values, _where, _table, _limit}: IBuildableUpdateQuery
   };
 }
 
-function DeleteCompiler({_where, _table, _limit}: IBuildableDeleteQuery): ISqlQuery {
+function DeleteCompiler({_where, _table, _limit, _columns}: IBuildableDeleteQuery): ISqlQuery {
   sqlCompiler.resetParams();
 
   let sql = `DELETE FROM ${pgBuilder.escapeTable(_table.tableName)}`;
@@ -370,7 +402,9 @@ function DeleteCompiler({_where, _table, _limit}: IBuildableDeleteQuery): ISqlQu
   if (_limit) {
     sql += ' LIMIT ' + sqlCompiler.compileExp(_limit)
   }
-  sql += ` RETURNING *;`;
+  sql += ` RETURNING ${
+    sqlCompiler.processColumns(_table.tableName, _columns)
+  };`;
 
   const params = sqlCompiler.collectParams();
 

@@ -36,6 +36,17 @@ export class Person {
   city!: string;
 }
 
+@dbTable('TaggedPerson')
+export class TaggedPerson {
+  @dbField({name: 'person_id'})
+  personId!: number;
+
+  @dbField({
+    model: [String],
+  })
+  tags!: string[];
+}
+
 @dbTable('Person', [{name: 'idx', fields: ['id']}])
 export class PersonPrivate {
   @dbField({
