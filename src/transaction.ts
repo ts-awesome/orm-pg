@@ -1,8 +1,10 @@
 import {PoolClient} from 'pg';
 import {PgExecutor} from './executor';
 import {ISqlQuery} from './interfaces';
-import {injectable} from 'inversify';
-import {IsolationLevel, ITransaction} from '@ts-awesome/orm';
+import {injectable, unmanaged} from 'inversify';
+import {IQueryData, IsolationLevel, ITransaction} from '@ts-awesome/orm';
+import {BaseTransaction} from "@ts-awesome/orm/dist/base";
+import {WithParams} from "@ts-awesome/orm/dist/interfaces";
 
 const COMMIT = 'COMMIT';
 const ROLLBACK = 'ROLLBACK';
@@ -14,13 +16,19 @@ export const UNSUPPORTED_ISOLATION_LEVEL = 'Unsupported isolation level ';
 export type PgTransactionalExecutorClient = Pick<PoolClient, 'query' | 'release'>;
 
 @injectable()
-export class PgTransaction extends PgExecutor implements ITransaction<ISqlQuery> {
+export class PgTransaction extends BaseTransaction<ISqlQuery> implements ITransaction<ISqlQuery> {
   private isFinished = false;
+  private executor: PgExecutor
 
   constructor(
-    private readonly conn: PgTransactionalExecutorClient
+    @unmanaged() private readonly conn: PgTransactionalExecutorClient
   ) {
-    super(conn);
+    super();
+    this.executor = new PgExecutor(conn)
+  }
+
+  protected do(query: ISqlQuery & WithParams): Promise<readonly IQueryData[]> {
+    return this.executor.execute(query);
   }
 
   public get finished(): boolean {

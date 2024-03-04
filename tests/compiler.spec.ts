@@ -51,14 +51,14 @@ describe('Compiler', () => {
     it('ASC Order by', () => {
       const query = Select(Person).orderBy(model => [model.age]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY "${tableName}"."age" ASC`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 4 ASC`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('DESC Order by', () => {
       const query = Select(Person).orderBy(model => [desc(model.age)]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY "${tableName}"."age" DESC`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 4 DESC`;
       expect(result).toStrictEqual(expectation);
     });
 
@@ -73,6 +73,20 @@ describe('Compiler', () => {
       const query = Select(Person).orderBy(() => [desc(0)]);
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 0 DESC`;
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('DESC Order by will NULLS last', () => {
+      const query = Select(Person).orderBy(() => [desc(0, 'LAST')]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 0 DESC NULLS LAST`;
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('DESC Order by will NULLS first', () => {
+      const query = Select(Person).orderBy(() => [desc(0, 'FIRST')]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 0 DESC NULLS FIRST`;
       expect(result).toStrictEqual(expectation);
     });
 
@@ -365,7 +379,7 @@ describe('Compiler', () => {
         .orderBy(['name']);
 
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."age" >= :p0)) UNION DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."age" < :p0)) EXCEPT DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."name" <> :p1)) ) ) EXCEPT ALL ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."city" = :p1)) ) INTERSECT DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."name" <> :p1)) ) ORDER BY "Person"."name" ASC`;
+      expectation.sql = `SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."age" >= :p0)) UNION DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."age" < :p0)) EXCEPT DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."name" <> :p1)) ) ) EXCEPT ALL ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."city" = :p1)) ) INTERSECT DISTINCT ( SELECT ALL "Person"."name" FROM "Person" WHERE (("Person"."name" <> :p1)) ) ORDER BY 1 ASC`;
       expectation.params = {p0: 18, p1: 'test'};
       expect(result).toStrictEqual(expectation);
     })
@@ -375,10 +389,35 @@ describe('Compiler', () => {
         .columns(x => [alias(case_({when: x.age.gte(2), then: 'yes'}, {else: 'no'}), 'dynamic')])
 
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL (CASE WHEN ("Person"."age" >= :p0) THEN :p1 ELSE :p2) AS "dynamic" FROM "Person"`;
+      expectation.sql = `SELECT ALL (CASE WHEN ("Person"."age" >= :p0) THEN :p1 ELSE :p2 END) AS "dynamic" FROM "Person"`;
       expectation.params = {p0: 2, p1: 'yes', p2: 'no'};
       expect(result).toStrictEqual(expectation);
     })
+
+    it('COUNT unique', () => {
+      const query = Select(Person)
+        .columns(x => [alias(count(x.id, true), 'dynamic')]);
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL (COUNT(DISTINCT "Person"."id")) AS "dynamic" FROM "Person"`;
+      expectation.params = {};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('SELECT over subquery', () => {
+      const query = Select(
+          Select(Person)
+            .columns(x => [count(x.id)])
+            .groupBy(x => [x.age])
+        )
+        .columns(() => [count(undefined, true)])
+        .limit(1);
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL COUNT(DISTINCT *) FROM ( SELECT ALL COUNT("Person"."id") FROM "Person" GROUP BY ("Person"."age") ) AS "Person_SUBQUERY" LIMIT :p0`;
+      expectation.params = {p0: 1};
+      expect(result).toStrictEqual(expectation);
+    });
   });
 
   describe('INSERT statement', () => {

@@ -1,25 +1,34 @@
 import {Pool} from 'pg';
 
-import {IQueryDriver, IsolationLevel, ITransaction} from '@ts-awesome/orm';
-import {PgExecutor} from './executor';
+import {IQueryData, IQueryDriver, IsolationLevel, ITransaction} from '@ts-awesome/orm';
 import {isSupportedIsolationLevel, PgTransaction, UNSUPPORTED_ISOLATION_LEVEL} from './transaction';
 import {injectable, unmanaged} from 'inversify';
 import { ISqlQuery } from './interfaces';
+import {BaseDriver} from "@ts-awesome/orm/dist/base";
+import {PgExecutor} from "./executor";
+import {WithParams} from "@ts-awesome/orm/dist/interfaces";
 
 const BEGIN = 'BEGIN TRANSACTION';
 
 type PgTransactionalExecutor = Pick<Pool, 'query' | 'connect' | 'end'>;
 
 @injectable()
-export class PgDriver extends PgExecutor
-  implements IQueryDriver<ISqlQuery> {
+export class PgDriver extends BaseDriver<ISqlQuery> implements IQueryDriver<ISqlQuery> {
+
+  private executor: PgExecutor
+
   constructor(
     @unmanaged() private readonly pool: PgTransactionalExecutor
   ) {
-    super(pool);
+    super();
+    this.executor = new PgExecutor(pool)
   }
 
-  public async begin(isolationLevel?: IsolationLevel): Promise<ITransaction<ISqlQuery>> {
+  protected do(query: ISqlQuery & WithParams): Promise<readonly IQueryData[]> {
+    return this.executor.execute(query);
+  }
+
+  protected async startTransaction(isolationLevel?: IsolationLevel): Promise<ITransaction<ISqlQuery>> {
     const client = await this.pool.connect();
 
     if (isolationLevel && !isSupportedIsolationLevel(isolationLevel as string)) {

@@ -10,6 +10,7 @@ import {
   IColumnRef,
   IExpr,
   IJoin,
+  IOrderBy,
 } from '@ts-awesome/orm';
 
 import {IExpression} from "@ts-awesome/orm/dist/intermediate";
@@ -67,12 +68,26 @@ const sqlCompiler = {
   _paramCount: 0,
   _paramMap: new Map<DbValueType, number>(),
 
-  compileOrderExp(expr: {_column: IColumnRef, _order?: string} | {_column: IColumnRef, _order?: string}[]): string {
+
+  compileOrderExp(expr: IOrderBy | IOrderBy[], columns: IExpression[]): string {
     if (Array.isArray(expr)) {
-      return expr.map(item => this.compileOrderExp(item)).join(', ');
+      return expr.map(item => this.compileOrderExp(item, columns)).join(', ');
     }
-    const {_column, _order} = expr;
-    return `${typeof _column === 'number' ? _column : pgBuilder.escapeColumnRef(_column)} ${_order ?? 'ASC'}`;
+    const {_column, _order, _nulls} = expr;
+    let idx = 0;
+    for (const column of columns) {
+      idx ++;
+      if (typeof column === 'object' && '_column' in column) {
+        if (column._column.name === _column.name && column._column.table === _column.table) {
+          return `${idx} ${_order ?? 'ASC'}`;
+        }
+      }
+    }
+    return (
+      (typeof _column === 'number' ? _column : pgBuilder.escapeColumnRef(_column)) + ' '
+      + (_order ?? 'ASC') + ' '
+      + (_nulls === 'FIRST' ? `NULLS FIRST` : _nulls === 'LAST' ? 'NULLS LAST' : '')
+    ).trim();
   },
 
   // generic
@@ -109,6 +124,10 @@ const sqlCompiler = {
       return this.compileExp(_value);
     }
     if (_func && _args) {
+      if (_func.toUpperCase() === 'COUNT' && (_args[0] as never) === 'DISTINCT') {
+        return `${_func}(DISTINCT ${_args.slice(1).map((arg: any) => this.compileExp(arg)).join(', ')})`
+      }
+
       return `${_func}(${_args.map((arg: any) => this.compileExp(arg)).join(', ')})`;
     }
     if (_operator && _operands) {
@@ -136,7 +155,7 @@ const sqlCompiler = {
           return `CASE ${_operands.map((x: any) => 'else' in x 
               ? `ELSE ${this.compileExp(x.else)}` 
               : `WHEN ${this.compileExp(x.when)} THEN ${this.compileExp(x.then)}`
-          ).join(' ')}`
+          ).join(' ')} END`
         case 'IN': {
           const ops = _operands as IExpr[];
           if (ops.length === 2 && Array.isArray(ops[1])) {
@@ -211,7 +230,7 @@ function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _havin
     _distinct === true ? 'DISTINCT' : 'ALL',
     sqlCompiler.processColumns(_alias || _table.tableName, _columns),
     'FROM',
-    pgBuilder.escapeTable(_table.tableName),
+    ('_type' in _table && _table._type === 'SELECT') ? `( ${SubSelectBuilder(_table)} )` : pgBuilder.escapeTable(_table.tableName),
     _alias ? `AS ${pgBuilder.escapeTable(_alias)}` : '',
   ];
 
@@ -257,9 +276,9 @@ function SelectCompiler(query: IBuildableSelectQuery): ISqlQuery {
 
   let sql = SubSelectBuilder(query);
 
-  const {_orderBy, _limit, _offset, _for} = query;
+  const {_orderBy, _limit, _offset, _for, _columns} = query;
   if (Array.isArray(_orderBy) && _orderBy.length) {
-    sql += ' ORDER BY ' + sqlCompiler.compileOrderExp(_orderBy)
+    sql += ' ORDER BY ' + sqlCompiler.compileOrderExp(_orderBy, _columns)
   }
 
   if (_limit) {
