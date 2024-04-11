@@ -69,6 +69,13 @@ describe('Compiler', () => {
       expect(result).toStrictEqual(expectation);
     });
 
+    it('DESC Order by anonymous field NULLS LAST', () => {
+      const query = Select(Person).orderBy(() => [desc(of(null, 'score'), 'LAST')]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY "score" DESC NULLS LAST`;
+      expect(result).toStrictEqual(expectation);
+    });
+
     it('DESC Order by index field', () => {
       const query = Select(Person).orderBy(() => [desc(0)]);
       const result = pgCompiler.compile(query);
@@ -76,17 +83,31 @@ describe('Compiler', () => {
       expect(result).toStrictEqual(expectation);
     });
 
-    it('DESC Order by will NULLS last', () => {
+    it('DESC Order by with NULLS last', () => {
       const query = Select(Person).orderBy(() => [desc(0, 'LAST')]);
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 0 DESC NULLS LAST`;
       expect(result).toStrictEqual(expectation);
     });
 
-    it('DESC Order by will NULLS first', () => {
+    it('DESC Order by with NULLS first', () => {
       const query = Select(Person).orderBy(() => [desc(0, 'FIRST')]);
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 0 DESC NULLS FIRST`;
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('DESC Order by email kind', () => {
+      const query = Select(Person).orderBy(({uid}) => [desc(uid)]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 2 DESC`;
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('DESC Order by with NULLS first for email kind', () => {
+      const query = Select(Person).orderBy(({uid}) => [desc(uid, 'FIRST')]);
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 2 DESC NULLS FIRST`;
       expect(result).toStrictEqual(expectation);
     });
 

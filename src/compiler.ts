@@ -74,17 +74,43 @@ const sqlCompiler = {
       return expr.map(item => this.compileOrderExp(item, columns)).join(', ');
     }
     const {_column, _order, _nulls} = expr;
-    let idx = 0;
-    for (const column of columns) {
-      idx ++;
-      if (typeof column === 'object' && '_column' in column) {
-        if (column._column.name === _column.name && column._column.table === _column.table) {
-          return `${idx} ${_order ?? 'ASC'}`;
+    const {_alias} = expr as never;
+
+    let orderByColumn: string;
+    if (typeof _column === 'number') {
+      orderByColumn = _column;
+    } else if (typeof _alias === 'string') {
+      let idx = 0;
+      for (const column of columns) {
+        idx ++;
+        if (typeof column === 'object' && '_alias' in column && (column as any)._alias === _alias) {
+          orderByColumn = idx.toString();
+          break;
         }
       }
+    } else if (_column) {
+      let idx = 0;
+      for (const column of columns) {
+        idx ++;
+        if (typeof column === 'object' && '_column' in column && _column) {
+          if (column._column.name === _column.name && column._column.table === _column.table) {
+            orderByColumn = idx.toString();
+            break;
+          }
+        }
+      }
+
+      if (!orderByColumn) {
+        orderByColumn = pgBuilder.escapeColumnRef(_column);
+      }
     }
+
+    if (orderByColumn == null) {
+      throw new Error('Invalid order by expr' + JSON.stringify(expr));
+    }
+
     return (
-      (typeof _column === 'number' ? _column : pgBuilder.escapeColumnRef(_column)) + ' '
+      orderByColumn + ' '
       + (_order ?? 'ASC') + ' '
       + (_nulls === 'FIRST' ? `NULLS FIRST` : _nulls === 'LAST' ? 'NULLS LAST' : '')
     ).trim();
