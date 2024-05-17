@@ -21,6 +21,17 @@ import {BaseCompiler} from "@ts-awesome/orm/dist/base";
 
 const pgBuilder = {
   // pg specific
+  escapeValue(value: DbValueType) {
+    if (value == null) {
+      return 'NULL';
+    }
+
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    return this.escapeLiteral(value.toString());
+  },
   escapeLiteral(value: string) {
     if (value == null) {
       return 'NULL';
@@ -457,6 +468,21 @@ function DeleteCompiler({_where, _table, _limit, _columns}: IBuildableDeleteQuer
     sql,
     params
   };
+}
+
+export function buildContextQuery(scope: 'SESSION' | 'LOCAL', context: Readonly<Record<string, DbValueType>>): ISqlQuery {
+  const statements = []
+  for(const [key, value] of Object.entries(context)) {
+    if (key === 'TIME ZONE') {
+      statements.push(`SET ${scope} TIME ZONE ${pgBuilder.escapeValue(value)}`);
+    } else {
+      statements.push(`SET ${scope} ${pgBuilder.escapeIdentifier(key)} TO ${pgBuilder.escapeValue(value)}`);
+    }
+  }
+
+  return {
+    sql: statements.join(';\n')
+  }
 }
 
 @injectable()

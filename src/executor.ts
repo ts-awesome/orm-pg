@@ -53,11 +53,15 @@ export class PgExecutor extends BaseExecutor<ISqlQuery, IQueryData> {
   }
 
   private prepareQuery(query?: ISqlQuery): QueryConfig {
-    const sql = query?.sql?.trim() ?? '';
-    if (sql === '') {
-      throw new Error(`Invalid SQL query ${JSON.stringify(query)}`);
-    }
-
-    return pg(sql)(query?.params ?? {});
+    return injectQueryParams(query);
   }
+}
+
+export function injectQueryParams(query?: ISqlQuery): QueryConfig {
+  const sql = query?.sql?.trim() ?? '';
+  if (sql === '') {
+    throw new Error(`Invalid SQL query ${JSON.stringify(query)}`);
+  }
+
+  return pg(sql)(query?.params ?? {});
 }

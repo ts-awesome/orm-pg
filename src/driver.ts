@@ -1,12 +1,13 @@
 import {Pool} from 'pg';
 
-import {IQueryData, IQueryDriver, IsolationLevel, ITransaction} from '@ts-awesome/orm';
+import {DbValueType, IQueryData, IQueryDriver, IsolationLevel, ITransaction} from '@ts-awesome/orm';
 import {isSupportedIsolationLevel, PgTransaction, UNSUPPORTED_ISOLATION_LEVEL} from './transaction';
 import {injectable, unmanaged} from 'inversify';
 import { ISqlQuery } from './interfaces';
 import {BaseDriver} from "@ts-awesome/orm/dist/base";
-import {PgExecutor} from "./executor";
+import {injectQueryParams, PgExecutor} from "./executor";
 import {WithParams} from "@ts-awesome/orm/dist/interfaces";
+import {buildContextQuery} from "./compiler";
 
 const BEGIN = 'BEGIN TRANSACTION';
 
@@ -18,14 +19,27 @@ export class PgDriver extends BaseDriver<ISqlQuery> implements IQueryDriver<ISql
   private executor: PgExecutor
 
   constructor(
-    @unmanaged() private readonly pool: PgTransactionalExecutor
+    @unmanaged() protected readonly pool: PgTransactionalExecutor,
+    @unmanaged() protected readonly context?: Readonly<Record<string, DbValueType>>,
   ) {
     super();
     this.executor = new PgExecutor(pool)
   }
 
-  protected do(query: ISqlQuery & WithParams): Promise<readonly IQueryData[]> {
-    return this.executor.execute(query);
+  protected async do(query: ISqlQuery & WithParams): Promise<readonly IQueryData[]> {
+    if (Object.keys(this.context ?? {}).length < 1) {
+      return this.executor.execute(query);
+    }
+
+    const client = await this.pool.connect();
+
+    try {
+      const ctx = buildContextQuery('SESSION', this.context);
+      await client.query(injectQueryParams(ctx));
+      return new PgExecutor(client).execute(query);
+    } finally {
+      client.release();
+    }
   }
 
   protected async startTransaction(isolationLevel?: IsolationLevel): Promise<ITransaction<ISqlQuery>> {
@@ -36,6 +50,12 @@ export class PgDriver extends BaseDriver<ISqlQuery> implements IQueryDriver<ISql
     }
 
     await client.query(BEGIN + (isSupportedIsolationLevel(isolationLevel) ? ' ISOLATION LEVEL ' + isolationLevel : ''));
+
+    if (Object.keys(this.context ?? {}).length) {
+      const query = buildContextQuery('LOCAL', this.context);
+      await client.query(injectQueryParams(query));
+    }
+
     return new PgTransaction(client);
   }
 
