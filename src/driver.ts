@@ -26,6 +26,10 @@ export class PgDriver extends BaseDriver<ISqlQuery> implements IQueryDriver<ISql
     this.executor = new PgExecutor(pool)
   }
 
+  public withContext(context: Readonly<Record<string, DbValueType>>) {
+    return new PgDriver(this.pool, context);
+  }
+
   protected async do(query: ISqlQuery & WithParams): Promise<readonly IQueryData[]> {
     if (Object.keys(this.context ?? {}).length < 1) {
       return this.executor.execute(query);
