@@ -465,7 +465,7 @@ describe('Compiler', () => {
     it('Insert array with cast', () => {
       const query = Insert(TaggedPerson).values({
         personId: person.id,
-        tags: cast(['123', '234', '345'], 'text[]') as never
+        tags: cast<string[]>(['123', '234', '345'], 'text[]')
       });
       const result = pgCompiler.compile(query);
       expectation.sql = `INSERT INTO "TaggedPerson" ("person_id", "tags") VALUES (:p0, CAST(ARRAY [:p1, :p2, :p3] AS text[])) RETURNING "TaggedPerson"."person_id", "TaggedPerson"."tags";`;
@@ -538,7 +538,7 @@ describe('Compiler', () => {
 
     it('Update array with cast', () => {
       const query = Update(TaggedPerson).values({
-        tags: cast(['123', '234', '345'], 'text[]') as never
+        tags: cast<string[]>(['123', '234', '345'], 'text[]')
       });
       const result = pgCompiler.compile(query);
       expectation.sql = `UPDATE "TaggedPerson" SET "tags" = CAST(ARRAY [:p0, :p1, :p2] AS text[]) RETURNING "TaggedPerson"."person_id", "TaggedPerson"."tags";`;

@@ -19,7 +19,7 @@
     "yesql": "^6.1.0"
   },
   "devDependencies": {
-    "@ts-awesome/orm": "^1.6.0-rc0",
+    "@ts-awesome/orm": "^1.6.0-rc1",
     "@types/inversify": "^2.0.33",
     "@types/jest": "^29.5.1",
     "@types/yesql": "^4.1.1",
