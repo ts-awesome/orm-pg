@@ -187,7 +187,7 @@ const sqlCompiler = {
         case 'BETWEEN':
           return `(${this.compileExp(_operands[0])} BETWEEN ${this.compileExp(_operands[1])} AND ${this.compileExp(_operands[2])})`;
         case 'CAST':
-          return `CAST(${this.compileExp(_operands[0])} AS ${_operands[1]})`;
+          return `CAST(${this.compileExp(_operands[0], nativeArrays)} AS ${_operands[1]})`;
         case 'CASE':
           return `CASE ${_operands.map((x: any) => 'else' in x 
               ? `ELSE ${this.compileExp(x.else)}` 

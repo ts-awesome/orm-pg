@@ -6,10 +6,10 @@ import {
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-  TableRef, dbTable, dbField, exists, count, case_,
+  TableRef, dbTable, dbField, exists, count, case_, cast,
 } from '@ts-awesome/orm';
 import {readModelMeta} from '@ts-awesome/orm/dist/builder';
-import {Employee, EmployeeWithNames, Person, UID, PersonPrivate, TaggedPerson} from './models';
+import {Employee, Person, UID, PersonPrivate, TaggedPerson} from './models';
 
 describe('Compiler', () => {
   const pgCompiler = new PgCompiler();
@@ -462,6 +462,17 @@ describe('Compiler', () => {
       expect(result).toStrictEqual(expectation);
     });
 
+    it('Insert array with cast', () => {
+      const query = Insert(TaggedPerson).values({
+        personId: person.id,
+        tags: cast(['123', '234', '345'], 'text[]') as never
+      });
+      const result = pgCompiler.compile(query);
+      expectation.sql = `INSERT INTO "TaggedPerson" ("person_id", "tags") VALUES (:p0, CAST(ARRAY [:p1, :p2, :p3] AS text[])) RETURNING "TaggedPerson"."person_id", "TaggedPerson"."tags";`;
+      expectation.params = {p0: person.id, p1: '123', p2: '234', p3: '345'};
+      expect(result).toStrictEqual(expectation);
+    });
+
     it('All defaults', () => {
       @dbTable(tableName)
       class WithDefaults {
@@ -521,6 +532,16 @@ describe('Compiler', () => {
       });
       const result = pgCompiler.compile(query);
       expectation.sql = `UPDATE "TaggedPerson" SET "tags" = ARRAY [:p0, :p1, :p2] RETURNING "TaggedPerson"."person_id", "TaggedPerson"."tags";`;
+      expectation.params = {p0: '123', p1: '234', p2: '345'};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Update array with cast', () => {
+      const query = Update(TaggedPerson).values({
+        tags: cast(['123', '234', '345'], 'text[]') as never
+      });
+      const result = pgCompiler.compile(query);
+      expectation.sql = `UPDATE "TaggedPerson" SET "tags" = CAST(ARRAY [:p0, :p1, :p2] AS text[]) RETURNING "TaggedPerson"."person_id", "TaggedPerson"."tags";`;
       expectation.params = {p0: '123', p1: '234', p2: '345'};
       expect(result).toStrictEqual(expectation);
     });
