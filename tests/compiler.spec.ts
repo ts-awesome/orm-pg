@@ -439,6 +439,19 @@ describe('Compiler', () => {
       expectation.params = {p0: 1};
       expect(result).toStrictEqual(expectation);
     });
+
+    it('SELECT casted const array', () => {
+      const query = Select(Person)
+        .columns(() => [
+          alias(cast<number[]>([], 'integer[]'), 'array')
+        ])
+        .limit(1);
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL (CAST(ARRAY [] AS integer[])) AS "array" FROM "Person" LIMIT :p0`;
+      expectation.params = {p0: 1};
+      expect(result).toStrictEqual(expectation);
+    });
   });
 
   describe('INSERT statement', () => {
