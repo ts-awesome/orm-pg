@@ -400,6 +400,9 @@ function UpsertCompiler({_values, _table, _conflictExp, _columns}: IBuildableUps
     }
     sql += ` DO UPDATE SET ${updateValues.join(', ')}`;
   }
+
+  // LIMIT is not supported in INSERT/UPSERT
+
   sql += ` RETURNING ${
     sqlCompiler.processColumns(_table.tableName, _columns)
   };`;
@@ -411,7 +414,7 @@ function UpsertCompiler({_values, _table, _conflictExp, _columns}: IBuildableUps
   };
 }
 
-function UpdateCompiler({_values, _where, _table, _limit, _columns}: IBuildableUpdateQuery): ISqlQuery {
+function UpdateCompiler({_values, _where, _table, _columns}: IBuildableUpdateQuery): ISqlQuery {
   sqlCompiler.resetParams();
 
   const values = Object
@@ -428,9 +431,8 @@ function UpdateCompiler({_values, _where, _table, _limit, _columns}: IBuildableU
     })}`;
   }
 
-  if (_limit) {
-    sql += ' LIMIT ' + sqlCompiler.compileExp(_limit)
-  }
+  // LIMIT is not supported in UPDATE
+
   sql += ` RETURNING ${
     sqlCompiler.processColumns(_table.tableName, _columns)
   };`;
@@ -443,7 +445,7 @@ function UpdateCompiler({_values, _where, _table, _limit, _columns}: IBuildableU
   };
 }
 
-function DeleteCompiler({_where, _table, _limit, _columns}: IBuildableDeleteQuery): ISqlQuery {
+function DeleteCompiler({_where, _table, _columns}: IBuildableDeleteQuery): ISqlQuery {
   sqlCompiler.resetParams();
 
   let sql = `DELETE FROM ${pgBuilder.escapeTable(_table.tableName)}`;
@@ -455,9 +457,8 @@ function DeleteCompiler({_where, _table, _limit, _columns}: IBuildableDeleteQuer
     })}`;
   }
 
-  if (_limit) {
-    sql += ' LIMIT ' + sqlCompiler.compileExp(_limit)
-  }
+  // LIMIT is not supported in DELETE
+
   sql += ` RETURNING ${
     sqlCompiler.processColumns(_table.tableName, _columns)
   };`;
