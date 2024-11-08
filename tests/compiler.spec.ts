@@ -570,8 +570,8 @@ describe('Compiler', () => {
     it('With limitation', () => {
       const query = Update(Person).values(person).where(model => model.id.eq(person.id)).limit(limit);
       const result = pgCompiler.compile(query);
-      expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) WHERE (("${tableName}"."id" = :p0)) LIMIT :p5 RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
-      expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid, p5: limit};
+      expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) WHERE (("${tableName}"."id" = :p0)) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
+      expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
       expect(result).toStrictEqual(expectation);
     });
   });
@@ -589,8 +589,8 @@ describe('Compiler', () => {
     it('With limitation', () => {
       const query = Delete(Person).where(model => model.age.lt(person.age)).limit(limit);
       const result = pgCompiler.compile(query);
-      expectation.sql = `DELETE FROM "${tableName}" WHERE (("${tableName}"."age" < :p0)) LIMIT :p1 RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
-      expectation.params = {p0: person.age, p1: limit};
+      expectation.sql = `DELETE FROM "${tableName}" WHERE (("${tableName}"."age" < :p0)) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
+      expectation.params = {p0: person.age};
       expect(result).toStrictEqual(expectation);
     });
   });
