@@ -11,6 +11,7 @@ import {
   IExpr,
   IJoin,
   IOrderBy,
+  IWindowDefinition,
 } from '@ts-awesome/orm';
 
 import {IExpression} from "@ts-awesome/orm/dist/intermediate";
@@ -52,6 +53,10 @@ const pgBuilder = {
   },
   escapeColumnRef(column: IColumnRef) {
     const {name, table} = column;
+    if (typeof name === 'number') {
+      return name;
+    }
+
     let value = pgBuilder.escapeColumnName(name);
     if (table) {
       value = `${pgBuilder.escapeTable(table)}.${value}`;
@@ -76,6 +81,9 @@ const pgBuilder = {
 };
 
 const sqlCompiler = {
+  _windowCount: 0,
+  _windowMap: new Map<string, [string, IWindowDefinition & { _extends: string }]>(),
+
   _paramCount: 0,
   _paramMap: new Map<DbValueType, number>(),
 
@@ -93,7 +101,7 @@ const sqlCompiler = {
     } else if (typeof _alias === 'string') {
       let idx = 0;
       for (const column of columns) {
-        idx ++;
+        idx++;
         if (typeof column === 'object' && '_alias' in column && (column as any)._alias === _alias) {
           orderByColumn = idx.toString();
           break;
@@ -102,7 +110,7 @@ const sqlCompiler = {
     } else if (_column) {
       let idx = 0;
       for (const column of columns) {
-        idx ++;
+        idx++;
         if (typeof column === 'object' && '_column' in column && _column) {
           if (column._column.name === _column.name && column._column.table === _column.table) {
             orderByColumn = idx.toString();
@@ -127,6 +135,21 @@ const sqlCompiler = {
     ).trim();
   },
 
+  processWindow(def: IWindowDefinition) {
+    const _extends = def._extends ? this.processWindow(def._extends) : null;
+    const _hash = [_extends, def._mode, def._start, def._end, def._exclusion, this.compileExp(def._groupBy ?? null), this.compileExp(def._orderBy ?? null)].join(':');
+
+    if (!this._windowMap.has(_hash)) {
+      this._windowMap.set(_hash, [`w${++this._windowCount}`, {
+        ...def,
+        _extends,
+      }]);
+    }
+
+    const [_id] = this._windowMap.get(_hash);
+    return _id;
+  },
+
   // generic
   compileExp(expr: IExpression | IExpression[] | any, nativeArrays = false): string {
     if (Array.isArray(expr)) {
@@ -148,16 +171,16 @@ const sqlCompiler = {
       _value?: IExpression | IExpression[],
     };
 
-    if (_const) {
+    if (_const !== undefined) {
       return pgBuilder.escapeLiteral(_const);
     }
-    if (_named) {
+    if (_named !== undefined) {
       return pgBuilder.formatNamedParam(_named);
     }
-    if (_column) {
+    if (_column !== undefined) {
       return pgBuilder.escapeColumnRef(_column);
     }
-    if (_value) {
+    if (_value !== undefined) {
       return this.compileExp(_value);
     }
     if (_func && _args) {
@@ -165,7 +188,17 @@ const sqlCompiler = {
         return `${_func}(DISTINCT ${_args.slice(1).map((arg: any) => this.compileExp(arg)).join(', ')})`
       }
 
-      return `${_func}(${_args.map((arg: any) => this.compileExp(arg)).join(', ')})`;
+      const {_over, _filter} = expr as { _over?: IWindowDefinition, _filter?: IExpression };
+
+      if (_over == null) {
+        return `${_func}(${_args.map((arg: any) => this.compileExp(arg)).join(', ')})`;
+      }
+
+      return [
+        `${_func}(${_args.map((arg: any) => this.compileExp(arg)).join(', ')})`,
+        _filter == null ? ' ' : ` FILTER (WHERE ${this.compileExp(_filter)}) `,
+        `OVER ${pgBuilder.escapeIdentifier(this.processWindow(_over))}`
+      ].join('');
     }
     if (_operator && _operands) {
       // noinspection FallThroughInSwitchStatementJS
@@ -189,9 +222,9 @@ const sqlCompiler = {
         case 'CAST':
           return `CAST(${this.compileExp(_operands[0], nativeArrays || /\[]$/.test(_operands[1] as never))} AS ${_operands[1]})`;
         case 'CASE':
-          return `CASE ${_operands.map((x: any) => 'else' in x 
-              ? `ELSE ${this.compileExp(x.else)}` 
-              : `WHEN ${this.compileExp(x.when)} THEN ${this.compileExp(x.then)}`
+          return `CASE ${_operands.map((x: any) => 'else' in x
+            ? `ELSE ${this.compileExp(x.else)}`
+            : `WHEN ${this.compileExp(x.when)} THEN ${this.compileExp(x.then)}`
           ).join(' ')} END`
         case 'IN': {
           const ops = _operands as IExpr[];
@@ -233,13 +266,13 @@ const sqlCompiler = {
     return `:${pgBuilder.getParam(this._paramMap.get(expr))}`;
   },
 
-  processColumns(tableName: string, columns?: (IExpression|string)[]) {
+  processColumns(tableName: string, columns?: (IExpression | string)[]) {
     if (!Array.isArray(columns) || columns.length < 1) {
       return pgBuilder.escapeTable(tableName) + '.*';
     }
 
     return columns.map((column) => {
-      const {_alias, _operands} = column as any as {_alias: string; _operands: IExpression[]};
+      const {_alias, _operands} = column as any as { _alias: string; _operands: IExpression[] };
       if (_alias) {
         return `${this.compileExp(_operands)} AS ${pgBuilder.escapeColumnName(_alias)}`;
       }
@@ -252,8 +285,8 @@ const sqlCompiler = {
     this._paramCount = 0;
   },
 
-  collectParams(): {[key: string]: DbValueType} {
-    const params: {[key: string]: DbValueType} = {};
+  collectParams(): { [key: string]: DbValueType } {
+    const params: { [key: string]: DbValueType } = {};
     sqlCompiler._paramMap.forEach((value, key) => {
       params[pgBuilder.getParam(value)] = key;
     });
@@ -261,7 +294,17 @@ const sqlCompiler = {
   }
 };
 
-function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _having, _joins, _alias, _operators}: IBuildableSubSelectQuery): string {
+function SubSelectBuilder({
+                            _columns,
+                            _distinct,
+                            _table,
+                            _where,
+                            _groupBy,
+                            _having,
+                            _joins,
+                            _alias,
+                            _operators
+                          }: IBuildableSubSelectQuery): string {
   const sql = [
     'SELECT',
     _distinct === true ? 'DISTINCT' : 'ALL',
@@ -272,7 +315,7 @@ function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _havin
   ];
 
   if (Array.isArray(_joins) && _joins.length) {
-    for(const {_tableName, _condition, _type = 'INNER', _alias} of _joins as IJoin[]) {
+    for (const {_tableName, _condition, _type = 'INNER', _alias} of _joins as IJoin[]) {
       sql.push(
         _type,
         'JOIN',
@@ -292,15 +335,58 @@ function SubSelectBuilder({_columns, _distinct, _table, _where, _groupBy, _havin
   }
 
   if (Array.isArray(_groupBy) && _groupBy.length) {
-    sql.push('GROUP BY', sqlCompiler.compileExp(_groupBy));
+    sql.push('GROUP BY', _groupBy.map(item => sqlCompiler.compileExp(item)).join(', '));
   }
 
   if (Array.isArray(_having) && _having.length) {
     sql.push('HAVING', sqlCompiler.compileExp(_having));
   }
 
+  if (sqlCompiler._windowMap.size) {
+    const defs = []
+    for (const [id, def] of sqlCompiler._windowMap.values()) {
+      const win = []
+      win.push(pgBuilder.escapeIdentifier(id), 'AS', '(');
+
+      if (typeof def._extends === 'string') {
+        win.push(pgBuilder.escapeIdentifier(def._extends));
+      }
+
+      if (def._groupBy) {
+        win.push('PARTITION BY', def._groupBy.map(item => sqlCompiler.compileExp(item)).join(', '));
+      }
+
+      if (def._orderBy) {
+        win.push('ORDER BY', sqlCompiler.compileOrderExp(def._orderBy, _columns));
+      }
+
+      if (def._mode) {
+        win.push(def._mode);
+
+        if (def._end == null) {
+          win.push(def._start);
+        } else {
+          win.push('BETWEEN', def._start, 'AND', def._end);
+        }
+
+        if (def._exclusion) {
+          win.push('EXCLUDE', def._exclusion);
+        }
+      }
+
+      win.push(')');
+
+      defs.push(win.join(' '));
+    }
+
+    sql.push('WINDOW', defs.join(', '));
+
+    sqlCompiler._windowCount = 0;
+    sqlCompiler._windowMap = new Map();
+  }
+
   if (Array.isArray(_operators)) {
-    for(const {_operator, _distinct, _operand} of _operators) {
+    for (const {_operator, _distinct, _operand} of _operators) {
       sql.push(_operator, _distinct ? 'DISTINCT' : 'ALL', '(', SubSelectBuilder(_operand), ')');
     }
   }
@@ -382,13 +468,15 @@ function UpsertCompiler({_values, _table, _conflictExp, _columns}: IBuildableUps
   const keys = Object.keys(_values).filter(k => _values[k] !== undefined);
   const fields = keys.map(field => pgBuilder.escapeColumnName(field));
   const values = keys.map(field => sqlCompiler.compileExp(_values[field], true));
-  const updateValues = keys.map(field => `${pgBuilder.escapeColumnName(field)} = ${sqlCompiler.compileExp(_values[field])}`);
+  const updateValues = keys
+    .filter(k => _conflictExp?._columns.every(x => x != k))
+    .map(field => `${pgBuilder.escapeColumnName(field)} = ${sqlCompiler.compileExp(_values[field])}`);
 
   let sql = `INSERT INTO ${pgBuilder.escapeTable(_table.tableName)} (${fields.join(', ')})` +
     ` VALUES (${values.join(', ')})` +
     ` ON CONFLICT`;
 
-  if(!_conflictExp) {
+  if (!_conflictExp) {
     sql += ` DO NOTHING`;
   } else {
     sql += ` (${_conflictExp._columns.map((c: any) => pgBuilder.escapeColumnName(c)).join(',')})`;
@@ -473,7 +561,7 @@ function DeleteCompiler({_where, _table, _columns}: IBuildableDeleteQuery): ISql
 
 export function buildContextQuery(scope: 'SESSION' | 'LOCAL', context: Readonly<Record<string, DbValueType>>): ISqlQuery {
   const statements = []
-  for(const [key, value] of Object.entries(context)) {
+  for (const [key, value] of Object.entries(context)) {
     if (key === 'TIME ZONE') {
       statements.push(`SET ${scope} TIME ZONE ${pgBuilder.escapeValue(value)}`);
     } else {
@@ -490,12 +578,18 @@ export function buildContextQuery(scope: 'SESSION' | 'LOCAL', context: Readonly<
 export class PgCompiler extends BaseCompiler<ISqlQuery> {
   compile(query: IBuildableQuery): ISqlQuery {
     switch (query._type) {
-      case 'SELECT': return SelectCompiler(query);
-      case 'INSERT': return InsertCompiler(query);
-      case 'UPSERT': return UpsertCompiler(query);
-      case 'UPDATE': return UpdateCompiler(query);
-      case 'DELETE': return DeleteCompiler(query);
-      default: throw new Error('Unsupported query ' + query);
+      case 'SELECT':
+        return SelectCompiler(query);
+      case 'INSERT':
+        return InsertCompiler(query);
+      case 'UPSERT':
+        return UpsertCompiler(query);
+      case 'UPDATE':
+        return UpdateCompiler(query);
+      case 'DELETE':
+        return DeleteCompiler(query);
+      default:
+        throw new Error('Unsupported query ' + query);
     }
   }
 }

@@ -6,10 +6,11 @@ import {
   desc, IBuildableQuery,
   Insert, max, of,
   Select, Update, Upsert,
-  TableRef, dbTable, dbField, exists, count, case_, cast,
+  TableRef, dbTable, dbField, exists, count, case_, cast, rank, asc,
 } from '@ts-awesome/orm';
-import {readModelMeta} from '@ts-awesome/orm/dist/builder';
+import {readModelMeta, Window} from '@ts-awesome/orm/dist/builder';
 import {Employee, Person, UID, PersonPrivate, TaggedPerson} from './models';
+import {DB_EMAIL} from "../src";
 
 describe('Compiler', () => {
   const pgCompiler = new PgCompiler();
@@ -28,30 +29,30 @@ describe('Compiler', () => {
   describe('Select statement', () => {
 
     it('Group by', () => {
-      const query = Select(Person).groupBy(['age']);
+      const query = Select(Person).groupBy(['age', 2]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY ("${tableName}"."age")`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY "${tableName}"."age", 2`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('FOR', () => {
       const query = Select(Person, 'NO KEY UPDATE').groupBy(['age']);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY ("${tableName}"."age") FOR NO KEY UPDATE`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY "${tableName}"."age" FOR NO KEY UPDATE`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('DISTINCT', () => {
       const query = Select(Person, true).groupBy(['age']);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT DISTINCT "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY ("${tableName}"."age")`;
+      expectation.sql = `SELECT DISTINCT "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY "${tableName}"."age"`;
       expect(result).toStrictEqual(expectation);
     });
 
     it('ASC Order by', () => {
-      const query = Select(Person).orderBy(model => [model.age]);
+      const query = Select(Person).orderBy(model => [model.age, asc(2)]);
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 4 ASC`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" ORDER BY 4 ASC, 2 ASC`;
       expect(result).toStrictEqual(expectation);
     });
 
@@ -204,7 +205,7 @@ describe('Compiler', () => {
       const [lowerBound, upperBound] = [18, 27];
       const query = Select(Person).groupBy(model => [model.city]).having(model => and(model.age.gte(lowerBound), model.age.lte(upperBound)));
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY ("${tableName}"."city") HAVING ((("${tableName}"."age" >= :p0) AND ("${tableName}"."age" <= :p1)))`;
+      expectation.sql = `SELECT ALL "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city" FROM "${tableName}" GROUP BY "${tableName}"."city" HAVING ((("${tableName}"."age" >= :p0) AND ("${tableName}"."age" <= :p1)))`;
       expectation.params = {p0: person.age, p1: upperBound};
       expect(result).toStrictEqual(expectation);
     });
@@ -435,7 +436,7 @@ describe('Compiler', () => {
         .limit(1);
 
       const result = pgCompiler.compile(query);
-      expectation.sql = `SELECT ALL COUNT(DISTINCT *) FROM ( SELECT ALL COUNT("Person"."id") FROM "Person" GROUP BY ("Person"."age") ) AS "Person_SUBQUERY" LIMIT :p0`;
+      expectation.sql = `SELECT ALL COUNT(DISTINCT *) FROM ( SELECT ALL COUNT("Person"."id") FROM "Person" GROUP BY "Person"."age" ) AS "Person_SUBQUERY" LIMIT :p0`;
       expectation.params = {p0: 1};
       expect(result).toStrictEqual(expectation);
     });
@@ -450,6 +451,69 @@ describe('Compiler', () => {
       const result = pgCompiler.compile(query);
       expectation.sql = `SELECT ALL (CAST(ARRAY [] AS integer[])) AS "array" FROM "Person" LIMIT :p0`;
       expectation.params = {p0: 1};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('SELECT over simple WINDOW', () => {
+      const win1 = new Window(Person)
+        .partitionBy(['city'])
+        .orderBy(['age']);
+
+      const query = Select(Person)
+        .columns(({id}) => [
+          id,
+          alias(rank(win1), 'rank')
+        ]);
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "Person"."id", (rank() OVER "w1") AS "rank" FROM "Person" WINDOW "w1" AS ( PARTITION BY "Person"."city" ORDER BY "Person"."age" ASC )`;
+      expectation.params = {};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('SELECT over filtered WINDOW', () => {
+      const win1 = new Window(Person)
+        .partitionBy(['city'])
+        .orderBy(['age']);
+
+
+      const win2 = new Window(Person, win1)
+        .rows()
+        .start(5, 'PRECEDING');
+
+      const query = Select(Person)
+        .columns(({id, name}) => [
+          id,
+          alias(rank(win2, name.like('test%')), 'rank')
+        ]);
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "Person"."id", (rank() FILTER (WHERE ("Person"."name" LIKE :p0)) OVER "w2") AS "rank" FROM "Person" WINDOW "w1" AS ( PARTITION BY "Person"."city" ORDER BY "Person"."age" ASC ), "w2" AS ( "w1" ROWS 5 PRECEDING )`;
+      expectation.params = {p0: 'test%'};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('SELECT over complex WINDOW', () => {
+      const win1 = new Window(Person)
+        .partitionBy(['city'])
+        .orderBy(['age']);
+
+
+      const win2 = new Window(Person, win1)
+        .groups()
+        .start(5, 'PRECEDING')
+        .end('UNBOUNDED', 'FOLLOWING')
+        .exclusion('CURRENT ROW');
+
+      const query = Select(Person)
+        .columns(({id, name}) => [
+          id,
+          alias(rank(win2, name.like('test%')), 'rank')
+        ]);
+
+      const result = pgCompiler.compile(query);
+      expectation.sql = `SELECT ALL "Person"."id", (rank() FILTER (WHERE ("Person"."name" LIKE :p0)) OVER "w2") AS "rank" FROM "Person" WINDOW "w1" AS ( PARTITION BY "Person"."city" ORDER BY "Person"."age" ASC ), "w2" AS ( "w1" GROUPS BETWEEN 5 PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW )`;
+      expectation.params = {p0: 'test%'};
       expect(result).toStrictEqual(expectation);
     });
   });
@@ -523,7 +587,7 @@ describe('Compiler', () => {
       // How correctly use where clause in upsert statement?
       const query = Upsert(Person).values(person).conflict('idx').where(model => model.id.eq(person.id));
       const result = pgCompiler.compile(query);
-      expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) ON CONFLICT ("id") DO UPDATE SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
+      expectation.sql = `INSERT INTO "${tableName}" ("id", "name", "age", "city", "uid") VALUES (:p0, :p1, :p2, :p3, UNHEX(:p4)) ON CONFLICT ("id") DO UPDATE SET "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
       expect(result).toStrictEqual(expectation);
     });
@@ -536,6 +600,24 @@ describe('Compiler', () => {
       const result = pgCompiler.compile(query);
       expectation.sql = `UPDATE "${tableName}" SET "id" = :p0, "name" = :p1, "age" = :p2, "city" = :p3, "uid" = UNHEX(:p4) RETURNING "${tableName}"."id", (HEX("${tableName}"."uid")) AS "uid", "${tableName}"."name", "${tableName}"."age", "${tableName}"."city";`;
       expectation.params = {p0: person.id, p1: person.name, p2: person.age, p3: person.city, p4: person.uid};
+      expect(result).toStrictEqual(expectation);
+    });
+
+    it('Update DB_EMAIL with null', () => {
+      @dbTable(tableName)
+      class Model {
+        @dbField({
+          model: String,
+          kind: DB_EMAIL,
+          nullable: true
+        })
+        public email!: string | null;
+      }
+
+      const query = Update(Model).values({email: null});
+      const result = pgCompiler.compile(query);
+      expectation.sql = `UPDATE "${tableName}" SET "email" = CAST(NULL AS Email) RETURNING (CAST("${tableName}"."email" AS Email)) AS "email";`;
+      expectation.params = {};
       expect(result).toStrictEqual(expectation);
     });
 
@@ -608,7 +690,7 @@ describe('Compiler', () => {
     expectation.sql = `SELECT ALL ("${tableName}"."name") AS "${nameAlias}", "${tableName}"."age" FROM "${tableName}"` +
       ` INNER JOIN "${empTableName}" ON ("${tableName}"."id" = "${empTableName}"."personId")` +
       ` WHERE ((("${tableName}"."age" >= :p0) AND ("${tableName}"."city" LIKE :p1)) AND ("${empTableName}"."salary" >= :p2))` +
-      ` GROUP BY ("${tableName}"."id")`;
+      ` GROUP BY "${tableName}"."id"`;
     expectation.params = {p0: person.age, p1: person.city, p2: salary};
     expect(result).toStrictEqual(expectation);
   });
